@@ -1,0 +1,94 @@
+import { NavLink } from "@/components/NavLink";
+import { Home, PenLine, BookHeart, Target, Heart, Mail, Eye, Settings, Menu, X } from "lucide-react";
+import { useState } from "react";
+import { useSettings } from "@/lib/store";
+import { motion, AnimatePresence } from "framer-motion";
+
+const navItems = [
+  { to: "/", icon: Home, label: "Home", end: true },
+  { to: "/write", icon: PenLine, label: "Write" },
+  { to: "/dreams", icon: BookHeart, label: "My Dreams" },
+  { to: "/targets", icon: Target, label: "Gentle Steps" },
+  { to: "/self-care", icon: Heart, label: "Take Care" },
+  { to: "/letters", icon: Mail, label: "Letters" },
+  { to: "/shared", icon: Eye, label: "Shared" },
+  { to: "/settings", icon: Settings, label: "Settings" },
+];
+
+export default function Layout({ children }: { children: React.ReactNode }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [settings] = useSettings();
+
+  if (settings.hideEverything) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="text-muted-foreground text-lg">Nothing to see here 🌿</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen">
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex w-56 flex-col border-r bg-card/50 p-4 gap-1 fixed h-full">
+        <h2 className="font-display text-xl font-bold text-primary mb-6 px-3">🌸 Dream & Care</h2>
+        {navItems.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60"
+            activeClassName="bg-secondary text-secondary-foreground"
+          >
+            <item.icon className="h-4 w-4" />
+            {item.label}
+          </NavLink>
+        ))}
+      </aside>
+
+      {/* Mobile header */}
+      <header className="fixed top-0 left-0 right-0 z-50 flex md:hidden items-center justify-between px-4 h-14 bg-card/80 backdrop-blur-sm border-b">
+        <span className="font-display text-lg font-bold text-primary">🌸 Dream & Care</span>
+        <button onClick={() => setMobileOpen(!mobileOpen)} className="p-2 rounded-lg hover:bg-secondary/60">
+          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
+      </header>
+
+      {/* Mobile nav overlay */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            initial={{ opacity: 0, x: "100%" }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: "100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="fixed inset-0 z-40 bg-card/95 backdrop-blur-sm pt-16 px-6 md:hidden"
+          >
+            <nav className="flex flex-col gap-1">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium text-muted-foreground transition-colors hover:bg-secondary/60"
+                  activeClassName="bg-secondary text-secondary-foreground"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <item.icon className="h-5 w-5" />
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Main content */}
+      <main className="flex-1 md:ml-56 pt-16 md:pt-0">
+        <div className="max-w-3xl mx-auto px-4 py-8">
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+}
