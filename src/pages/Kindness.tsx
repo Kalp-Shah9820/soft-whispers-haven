@@ -22,7 +22,7 @@ export default function Kindness() {
         className="bg-card rounded-3xl p-10 shadow-sm text-center max-w-md"
       >
         <Heart className="h-10 w-10 mx-auto mb-6 text-primary animate-float" />
-        <p className="text-lg font-medium text-foreground leading-relaxed">
+        <p className="text-lg font-display font-light text-foreground leading-relaxed">
           {KINDNESS_AFFIRMATIONS[index]}
         </p>
       </motion.div>

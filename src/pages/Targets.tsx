@@ -11,8 +11,8 @@ export default function Targets() {
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-bold text-primary mb-1">Gentle Steps 🎯</h1>
-        <p className="text-sm text-muted-foreground">Every step counts — even resting.</p>
+        <h1 className="text-2xl font-display font-light text-primary mb-1">Gentle Steps 🎯</h1>
+        <p className="text-sm text-muted-foreground">Every step matters — even resting is a step forward.</p>
       </motion.div>
 
       {allTargets.length === 0 ? (
@@ -31,14 +31,14 @@ export default function Targets() {
             <motion.div key={state} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
               <div className="flex items-center gap-2">
                 <span className="text-xl">{info.emoji}</span>
-                <h2 className="font-display font-semibold text-foreground">{info.label}</h2>
+                <h2 className="font-display text-lg font-light text-foreground">{info.label}</h2>
                 <span className="text-xs text-muted-foreground ml-auto">{info.message}</span>
               </div>
               {targets.map((t) => (
                 <Link
                   key={t.id}
                   to={`/dreams/${t.dreamId}`}
-                  className="block bg-card rounded-xl p-4 hover:shadow-sm transition-shadow"
+                  className="block bg-card rounded-2xl p-4 hover:shadow-sm transition-shadow"
                 >
                   <p className="text-sm font-medium text-foreground">{t.text}</p>
                   <p className="text-xs text-muted-foreground mt-1">from "{t.dreamTitle}"</p>
