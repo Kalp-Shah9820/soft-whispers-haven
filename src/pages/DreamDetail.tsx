@@ -31,7 +31,7 @@ export default function DreamDetail() {
 
   const addTarget = () => {
     if (!newTarget.trim()) return;
-    update({ targets: [...dream.targets, { id: genId(), dreamId: dream.id, text: newTarget, state: "starting", shared: false }] });
+    update({ targets: [...dream.targets, { id: genId(), dreamId: dream.id, text: newTarget, state: "starting", shared: true }] });
     setNewTarget("");
   };
 
@@ -61,7 +61,7 @@ export default function DreamDetail() {
             type="text"
             value={dream.title}
             onChange={(e) => update({ title: e.target.value })}
-            className="text-2xl font-display font-bold bg-transparent border-none focus:outline-none flex-1 text-foreground"
+            className="text-2xl font-display font-light bg-transparent border-none focus:outline-none flex-1 text-foreground"
           />
         </div>
 
@@ -71,7 +71,7 @@ export default function DreamDetail() {
             <button
               key={m}
               onClick={() => update({ mood: m })}
-              className={`text-lg p-1.5 rounded-lg transition-all ${dream.mood === m ? "bg-primary/20 scale-110" : "hover:bg-secondary/50"}`}
+              className={`text-lg p-1.5 rounded-xl transition-all ${dream.mood === m ? "bg-primary/20 scale-110" : "hover:bg-secondary/50"}`}
             >
               {m}
             </button>
@@ -81,23 +81,23 @@ export default function DreamDetail() {
         <Textarea
           value={dream.content}
           onChange={(e) => update({ content: e.target.value })}
-          className="min-h-[180px] border-none bg-card/50 rounded-2xl p-5 text-base resize-none focus-visible:ring-primary/30"
+          className="min-h-[180px] border-none bg-card/50 rounded-2xl p-5 text-base resize-none focus-visible:ring-primary/30 leading-relaxed"
         />
 
-        <div className="flex items-center justify-between bg-card rounded-xl px-4 py-3">
-          <span className="text-sm text-muted-foreground">Share this dream?</span>
+        <div className="flex items-center justify-between bg-card rounded-2xl px-4 py-3">
+          <span className="text-sm text-muted-foreground">Share this dream? 💕</span>
           <Switch checked={dream.shared} onCheckedChange={(v) => update({ shared: v })} />
         </div>
       </motion.div>
 
       {/* Gentle targets */}
       <div className="space-y-4">
-        <h2 className="text-lg font-display font-semibold text-foreground">Gentle Steps 🌱</h2>
+        <h2 className="text-lg font-display font-light text-foreground">Gentle Steps 🌱</h2>
 
         {dream.targets.map((target) => {
           const info = TARGET_STATE_LABELS[target.state];
           return (
-            <motion.div key={target.id} layout className="bg-card rounded-xl p-4 space-y-3">
+            <motion.div key={target.id} layout className="bg-card rounded-2xl p-4 space-y-3">
               <div className="flex items-start justify-between gap-2">
                 <p className="text-sm font-medium text-foreground flex-1">{target.text}</p>
                 <button onClick={() => removeTarget(target.id)} className="text-muted-foreground hover:text-destructive transition-colors p-1">
@@ -122,7 +122,7 @@ export default function DreamDetail() {
               </div>
               <p className="text-xs text-muted-foreground italic">{info.message}</p>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Share this step?</span>
+                <span className="text-xs text-muted-foreground">Share this step? 💕</span>
                 <Switch checked={target.shared} onCheckedChange={(v) => updateTarget(target.id, { shared: v })} className="scale-75" />
               </div>
             </motion.div>
@@ -137,9 +137,9 @@ export default function DreamDetail() {
             value={newTarget}
             onChange={(e) => setNewTarget(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addTarget()}
-            className="flex-1 bg-card rounded-xl px-4 py-3 text-sm border-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="flex-1 bg-card rounded-2xl px-4 py-3 text-sm border-none focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
-          <button onClick={addTarget} className="p-3 bg-primary/20 rounded-xl hover:bg-primary/30 transition-colors text-primary">
+          <button onClick={addTarget} className="p-3 bg-primary/20 rounded-2xl hover:bg-primary/30 transition-colors text-primary">
             <Plus className="h-4 w-4" />
           </button>
         </div>
@@ -147,7 +147,7 @@ export default function DreamDetail() {
 
       {/* Delete */}
       <button onClick={deleteDream} className="text-xs text-muted-foreground hover:text-destructive transition-colors mt-8">
-        Let go of this dream
+        Gently let go of this dream
       </button>
     </div>
   );

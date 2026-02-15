@@ -16,8 +16,8 @@ export default function Dreams() {
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-bold text-primary mb-1">My Dreams 📖</h1>
-        <p className="text-sm text-muted-foreground">Every dream deserves to be held gently.</p>
+        <h1 className="text-2xl font-display font-light text-primary mb-1">My Dreams 📖</h1>
+        <p className="text-sm text-muted-foreground">Every dream deserves to be held gently and lovingly.</p>
       </motion.div>
 
       {/* Filter */}
@@ -54,7 +54,7 @@ export default function Dreams() {
             >
               <Link
                 to={`/dreams/${dream.id}`}
-                className="block bg-card rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow group"
+                className="block bg-card rounded-3xl p-5 shadow-sm hover:shadow-md transition-shadow group"
               >
                 <div className="flex items-start justify-between mb-2">
                   <span className="text-2xl">{dream.mood}</span>
@@ -62,10 +62,10 @@ export default function Dreams() {
                     {dream.shared ? "💕 Shared" : "🔒 Private"}
                   </span>
                 </div>
-                <h3 className="font-display font-semibold text-foreground group-hover:text-primary transition-colors">
+                <h3 className="font-display text-lg font-light text-foreground group-hover:text-primary transition-colors">
                   {dream.title}
                 </h3>
-                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{dream.content}</p>
+                <p className="text-sm text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{dream.content}</p>
                 {dream.targets.length > 0 && (
                   <p className="text-xs text-muted-foreground mt-3">
                     {dream.targets.length} gentle step{dream.targets.length > 1 ? "s" : ""}

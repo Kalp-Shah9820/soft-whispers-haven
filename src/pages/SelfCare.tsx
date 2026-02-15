@@ -13,19 +13,27 @@ const CATEGORIES = {
   skincare: {
     emoji: "🧴",
     label: "Skincare",
-    items: ["Morning cleanse", "Moisturize", "Sunscreen", "Evening routine"],
+    items: [
+      "Morning cleanse",
+      "Morning moisturize",
+      "Sunscreen",
+      "Evening cleanse",
+      "Night moisturize",
+      "Bath check-up",
+      "After bath care",
+    ],
     settingsKey: "showSkincare" as const,
   },
   rest: {
     emoji: "😴",
     label: "Rest & Sleep",
-    items: ["Took a break today", "Stretched or moved gently", "Wind-down routine", "In bed on time"],
+    items: ["Took a gentle break today", "Stretched or moved softly", "Wind-down routine", "In bed on time"],
     settingsKey: "showRest" as const,
   },
   period: {
     emoji: "🌺",
     label: "Period Awareness",
-    items: ["Tracking today", "Extra rest taken", "Comfort measures"],
+    items: ["Tracking today", "Extra rest taken", "Comfort measures", "Warm drink or heat pad"],
     settingsKey: "showPeriod" as const,
   },
 };
@@ -55,11 +63,14 @@ export default function SelfCare() {
 
   const visibleCategories = Object.entries(CATEGORIES).filter(([, c]) => settings[c.settingsKey]);
 
+  // Water reminder info
+  const waterFreq = settings.waterReminderFrequency || 2;
+
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-bold text-primary mb-1">Take Care 💖</h1>
-        <p className="text-sm text-muted-foreground">Go at your own pace. No pressure, ever.</p>
+        <h1 className="text-2xl font-display font-light text-primary mb-1">Take Care 💖</h1>
+        <p className="text-sm text-muted-foreground">Go at your own pace, love. No pressure, ever.</p>
       </motion.div>
 
       {visibleCategories.length === 0 ? (
@@ -74,24 +85,47 @@ export default function SelfCare() {
               key={cat}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-card rounded-2xl p-5 space-y-3"
+              className="bg-card rounded-3xl p-5 space-y-3"
             >
-              <h2 className="font-display font-semibold text-foreground flex items-center gap-2">
-                <span className="text-xl">{config.emoji}</span> {config.label}
-              </h2>
-              {categoryItems.map((item) => (
-                <label
-                  key={item.id}
-                  className="flex items-center gap-3 cursor-pointer py-1.5 group"
-                >
-                  <Checkbox
-                    checked={item.checked}
-                    onCheckedChange={() => toggle(item.id)}
-                    className="rounded-full border-primary/40 data-[state=checked]:bg-primary"
-                  />
-                  <span className={`text-sm transition-colors ${item.checked ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                    {item.label}
+              <div className="flex items-center justify-between">
+                <h2 className="font-display text-lg font-light text-foreground flex items-center gap-2">
+                  <span className="text-xl">{config.emoji}</span> {config.label}
+                </h2>
+                {cat === "water" && (
+                  <span className="text-xs text-muted-foreground bg-secondary/40 px-3 py-1 rounded-full">
+                    Every {waterFreq}h 💧
                   </span>
+                )}
+              </div>
+              {cat === "skincare" && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground font-medium">☀️ Morning</p>
+                  {categoryItems.filter((i) => ["Morning cleanse", "Morning moisturize", "Sunscreen"].includes(i.label)).map((item) => (
+                    <label key={item.id} className="flex items-center gap-3 cursor-pointer py-1.5 group">
+                      <Checkbox checked={item.checked} onCheckedChange={() => toggle(item.id)} className="rounded-full border-primary/40 data-[state=checked]:bg-primary" />
+                      <span className={`text-sm transition-colors ${item.checked ? "text-muted-foreground line-through" : "text-foreground"}`}>{item.label}</span>
+                    </label>
+                  ))}
+                  <p className="text-xs text-muted-foreground font-medium pt-2">🌙 Evening</p>
+                  {categoryItems.filter((i) => ["Evening cleanse", "Night moisturize"].includes(i.label)).map((item) => (
+                    <label key={item.id} className="flex items-center gap-3 cursor-pointer py-1.5 group">
+                      <Checkbox checked={item.checked} onCheckedChange={() => toggle(item.id)} className="rounded-full border-primary/40 data-[state=checked]:bg-primary" />
+                      <span className={`text-sm transition-colors ${item.checked ? "text-muted-foreground line-through" : "text-foreground"}`}>{item.label}</span>
+                    </label>
+                  ))}
+                  <p className="text-xs text-muted-foreground font-medium pt-2">🛁 Bath</p>
+                  {categoryItems.filter((i) => ["Bath check-up", "After bath care"].includes(i.label)).map((item) => (
+                    <label key={item.id} className="flex items-center gap-3 cursor-pointer py-1.5 group">
+                      <Checkbox checked={item.checked} onCheckedChange={() => toggle(item.id)} className="rounded-full border-primary/40 data-[state=checked]:bg-primary" />
+                      <span className={`text-sm transition-colors ${item.checked ? "text-muted-foreground line-through" : "text-foreground"}`}>{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {cat !== "skincare" && categoryItems.map((item) => (
+                <label key={item.id} className="flex items-center gap-3 cursor-pointer py-1.5 group">
+                  <Checkbox checked={item.checked} onCheckedChange={() => toggle(item.id)} className="rounded-full border-primary/40 data-[state=checked]:bg-primary" />
+                  <span className={`text-sm transition-colors ${item.checked ? "text-muted-foreground line-through" : "text-foreground"}`}>{item.label}</span>
                 </label>
               ))}
             </motion.div>
@@ -100,7 +134,7 @@ export default function SelfCare() {
       )}
 
       <p className="text-center text-xs text-muted-foreground">
-        Remember: doing even one thing is enough 💛
+        Remember: doing even one little thing is enough 💛
       </p>
     </div>
   );
