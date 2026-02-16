@@ -1,10 +1,12 @@
 import { motion } from "framer-motion";
 import { useRole, useSettings, getPersonalizedGreeting } from "@/lib/store";
 import { Heart, Users } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export default function RoleSelect() {
   const [, setRole] = useRole();
   const [settings] = useSettings();
+  const navigate = useNavigate();
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-background px-4">
@@ -27,7 +29,7 @@ export default function RoleSelect() {
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => setRole("self")}
+            onClick={() => { setRole("self"); navigate("/"); }}
             className="bg-lavender hover:bg-lavender/80 rounded-3xl p-8 text-center transition-colors space-y-3"
           >
             <Heart className="h-10 w-10 mx-auto text-lavender-foreground" />
@@ -40,7 +42,7 @@ export default function RoleSelect() {
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => setRole("partner")}
+            onClick={() => { setRole("partner"); navigate("/"); }}
             className="bg-peach hover:bg-peach/80 rounded-3xl p-8 text-center transition-colors space-y-3"
           >
             <Users className="h-10 w-10 mx-auto text-peach-foreground" />
