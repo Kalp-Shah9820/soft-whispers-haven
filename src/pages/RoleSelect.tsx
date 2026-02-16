@@ -42,7 +42,7 @@ export default function RoleSelect() {
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => { setRole("partner"); navigate("/"); }}
+            onClick={() => { setRole("partner"); navigate("/shared"); }}
             className="bg-peach hover:bg-peach/80 rounded-3xl p-8 text-center transition-colors space-y-3"
           >
             <Users className="h-10 w-10 mx-auto text-peach-foreground" />
