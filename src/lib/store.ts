@@ -115,7 +115,16 @@ function useLocalStorage<T>(key: string, defaultValue: T): [T, (val: T | ((prev:
 export const useDreams = () => useLocalStorage<Dream[]>("dc-dreams", []);
 export const useThoughts = () => useLocalStorage<Thought[]>("dc-thoughts", []);
 export const useLetters = () => useLocalStorage<Letter[]>("dc-letters", []);
-export const useSettings = () => useLocalStorage<Settings>("dc-settings", DEFAULT_SETTINGS);
+export const useSettings = (): [Settings, (val: Settings | ((prev: Settings) => Settings)) => void] => {
+  const [raw, setRaw] = useLocalStorage<Settings>("dc-settings", DEFAULT_SETTINGS);
+  // Merge with defaults to handle missing fields from older localStorage data
+  const merged: Settings = {
+    ...DEFAULT_SETTINGS,
+    ...raw,
+    identity: { ...DEFAULT_SETTINGS.identity, ...(raw?.identity || {}) },
+  };
+  return [merged, setRaw];
+};
 export const useEmotionalCheckin = () => useLocalStorage<string | null>("dc-checkin-today", null);
 export const useMoodHistory = () => useLocalStorage<MoodEntry[]>("dc-mood-history", []);
 export const useLastMoodCheck = () => useLocalStorage<string>("dc-last-mood-check", "");
