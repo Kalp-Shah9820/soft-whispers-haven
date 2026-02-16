@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { useSettings, useRole, type CurrentNeed } from "@/lib/store";
 import { Switch } from "@/components/ui/switch";
 import { Shield, LogOut } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const NEEDS: { value: CurrentNeed; label: string; emoji: string }[] = [
   { value: "rest", label: "Rest", emoji: "😴" },
@@ -15,6 +16,7 @@ const NEEDS: { value: CurrentNeed; label: string; emoji: string }[] = [
 export default function SettingsPage() {
   const [settings, setSettings] = useSettings();
   const [, setRole] = useRole();
+  const navigate = useNavigate();
 
   const update = (patch: Partial<typeof settings>) => setSettings((prev) => ({ ...prev, ...patch }));
   const updateIdentity = (patch: Partial<typeof settings.identity>) =>
@@ -176,7 +178,7 @@ export default function SettingsPage() {
 
       {/* Switch role */}
       <button
-        onClick={() => setRole("self")}
+        onClick={() => navigate("/role")}
         className="w-full flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-3"
       >
         <LogOut className="h-4 w-4" /> Switch to role selection
