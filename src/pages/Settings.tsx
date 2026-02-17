@@ -44,17 +44,7 @@ export default function SettingsPage() {
             />
           </div>
           <div>
-            <label className="text-sm text-muted-foreground block mb-1">Your phone number (optional)</label>
-            <input
-              type="tel"
-              placeholder="Just for you..."
-              value={settings.identity.phone}
-              onChange={(e) => updateIdentity({ phone: e.target.value })}
-              className="w-full bg-secondary/30 rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-          <div>
-            <label className="text-sm text-muted-foreground block mb-1">Partner's nickname (optional)</label>
+            <label className="text-sm text-muted-foreground block mb-1">Partner&apos;s nickname (optional)</label>
             <input
               type="text"
               placeholder="What do you call them?"
@@ -62,6 +52,42 @@ export default function SettingsPage() {
               onChange={(e) => updateIdentity({ partnerName: e.target.value })}
               className="w-full bg-secondary/30 rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
+          </div>
+        </div>
+      </div>
+
+      {/* Phone numbers for WhatsApp notifications */}
+      <div className="bg-card rounded-3xl p-5 space-y-4">
+        <h2 className="font-display text-lg font-light text-foreground">📲 WhatsApp Notifications</h2>
+        <p className="text-xs text-muted-foreground">
+          Add phone numbers with country code (e.g. +91 98765 43210). Both of you will get gentle reminders and updates.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm text-muted-foreground block mb-1">Your phone number</label>
+            <input
+              type="tel"
+              placeholder="+91 98765 43210"
+              value={settings.identity.phone}
+              onChange={(e) => updateIdentity({ phone: e.target.value })}
+              className="w-full bg-secondary/30 rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              You’ll get: water reminders, self-care time, daily motivation, period care.
+            </p>
+          </div>
+          <div>
+            <label className="text-sm text-muted-foreground block mb-1">Partner’s phone number</label>
+            <input
+              type="tel"
+              placeholder="+91 98765 43210"
+              value={settings.identity.partnerPhone}
+              onChange={(e) => updateIdentity({ partnerPhone: e.target.value })}
+              className="w-full bg-secondary/30 rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              They’ll get: when you share dreams, thoughts, letters, mood; when you complete a self-care task.
+            </p>
           </div>
         </div>
       </div>

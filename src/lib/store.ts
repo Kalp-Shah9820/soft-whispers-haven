@@ -62,6 +62,7 @@ export interface Identity {
   name: string;
   phone: string;
   partnerName: string;
+  partnerPhone: string;
 }
 
 export interface Settings {
@@ -86,7 +87,7 @@ const DEFAULT_SETTINGS: Settings = {
   hideEverything: false,
   periodStartDate: "",
   currentNeed: "gentle-reminders",
-  identity: { name: "", phone: "", partnerName: "" },
+  identity: { name: "", phone: "", partnerName: "", partnerPhone: "" },
   waterReminderFrequency: 2,
 };
 
