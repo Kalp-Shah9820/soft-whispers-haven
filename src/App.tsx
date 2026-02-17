@@ -7,6 +7,7 @@ import { useRole } from "@/lib/store";
 import Layout from "@/components/Layout";
 import MoodCheckModal from "@/components/MoodCheckModal";
 import RoleSelect from "@/pages/RoleSelect";
+import Login from "@/pages/Login";
 import Home from "@/pages/Home";
 import Write from "@/pages/Write";
 import Dreams from "@/pages/Dreams";
@@ -35,6 +36,7 @@ function AppContent() {
       <Layout>
         <Routes>
           <Route path="/" element={role === "partner" ? <Shared /> : <Home />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/write" element={<Write />} />
           <Route path="/dreams" element={<Dreams />} />
           <Route path="/dreams/:id" element={<DreamDetail />} />

@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { useSettings, useRole, type CurrentNeed } from "@/lib/store";
 import { Switch } from "@/components/ui/switch";
-import { Shield, LogOut } from "lucide-react";
+import { Shield, LogOut, Send } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { clearAuthToken } from "@/lib/api";
 
 const NEEDS: { value: CurrentNeed; label: string; emoji: string }[] = [
   { value: "rest", label: "Rest", emoji: "😴" },
@@ -13,10 +16,68 @@ const NEEDS: { value: CurrentNeed; label: string; emoji: string }[] = [
   { value: "gentle-reminders", label: "Gentle reminders", emoji: "🌿" },
 ];
 
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+
+function SendTestNotificationButton({ phone }: { phone: string }) {
+  const [sending, setSending] = useState(false);
+  const navigate = useNavigate();
+
+  const handleSendTest = async () => {
+    const raw = (phone || "").trim();
+    if (!raw) {
+      toast.error("Add your phone number above first");
+      return;
+    }
+    const token = localStorage.getItem("auth_token");
+    if (!token) {
+      toast.message("Please connect the app to the backend first");
+      navigate("/login");
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await fetch(`${API_BASE}/test/whatsapp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          phone: raw,
+          message: "🧪 Test from Emotional Companion — notifications are working! 💚",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        toast.success("Test message sent! Check your WhatsApp.");
+      } else {
+        toast.error(data.error || "Failed to send. Check server logs and Twilio setup.");
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Could not reach the server. Is the backend running?");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleSendTest}
+      disabled={sending}
+      className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-primary/20 text-primary hover:bg-primary/30 disabled:opacity-50 transition-colors"
+    >
+      <Send className="h-4 w-4" />
+      {sending ? "Sending…" : "Send test notification to my number"}
+    </button>
+  );
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useSettings();
   const [, setRole] = useRole();
   const navigate = useNavigate();
+  const isConnected = !!localStorage.getItem("auth_token");
 
   const update = (patch: Partial<typeof settings>) => setSettings((prev) => ({ ...prev, ...patch }));
   const updateIdentity = (patch: Partial<typeof settings.identity>) =>
@@ -28,6 +89,42 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-display font-light text-primary mb-1">Your Space, Your Rules ⚙️</h1>
         <p className="text-sm text-muted-foreground">Everything here is lovingly in your control.</p>
       </motion.div>
+
+      {/* Backend connection */}
+      <div className="bg-card rounded-3xl p-5 space-y-3">
+        <h2 className="font-display text-lg font-light text-foreground">Backend connection</h2>
+        <p className="text-xs text-muted-foreground">
+          This is never automatic. Connect only when you choose to.
+        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm">
+            Status:{" "}
+            <span className={isConnected ? "text-primary font-medium" : "text-muted-foreground"}>
+              {isConnected ? "Connected" : "Not connected"}
+            </span>
+          </p>
+          {isConnected ? (
+            <button
+              type="button"
+              onClick={() => {
+                clearAuthToken();
+                toast.success("Disconnected");
+              }}
+              className="px-4 py-2 rounded-xl text-sm font-medium bg-destructive/15 text-destructive hover:bg-destructive/25 transition-colors"
+            >
+              Disconnect
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate("/login")}
+              className="px-4 py-2 rounded-xl text-sm font-medium bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
+            >
+              Connect
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Identity */}
       <div className="bg-card rounded-3xl p-5 space-y-4">
@@ -67,7 +164,7 @@ export default function SettingsPage() {
             <label className="text-sm text-muted-foreground block mb-1">Your phone number</label>
             <input
               type="tel"
-              placeholder="+91 98765 43210"
+              placeholder="+91 82919 12131"
               value={settings.identity.phone}
               onChange={(e) => updateIdentity({ phone: e.target.value })}
               className="w-full bg-secondary/30 rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -80,7 +177,7 @@ export default function SettingsPage() {
             <label className="text-sm text-muted-foreground block mb-1">Partner’s phone number</label>
             <input
               type="tel"
-              placeholder="+91 98765 43210"
+              placeholder="+91 72080 42263"
               value={settings.identity.partnerPhone}
               onChange={(e) => updateIdentity({ partnerPhone: e.target.value })}
               className="w-full bg-secondary/30 rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -89,6 +186,7 @@ export default function SettingsPage() {
               They’ll get: when you share dreams, thoughts, letters, mood; when you complete a self-care task.
             </p>
           </div>
+          <SendTestNotificationButton phone={settings.identity.phone} />
         </div>
       </div>
 

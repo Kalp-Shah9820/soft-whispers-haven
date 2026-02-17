@@ -1,0 +1,195 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  MAIN_USER
+  PARTNER
+}
+
+enum Mood {
+  HAPPY
+  CALM
+  BLOSSOM
+  THOUGHTFUL
+  DREAMY
+  SPARKLE
+  STRONG
+  TENDER
+  TIRED
+  RAINBOW
+}
+
+enum VisitMood {
+  HAPPY
+  LOW
+  CALM
+  ANXIOUS
+  TIRED
+  SOFT
+  OVERWHELMED
+}
+
+enum TargetState {
+  STARTING
+  IN_PROGRESS
+  FEELS_GOOD
+  RESTING
+}
+
+enum CurrentNeed {
+  REST
+  MOTIVATION
+  SPACE
+  SUPPORT
+  SILENCE
+  GENTLE_REMINDERS
+}
+
+enum SelfCareCategory {
+  WATER
+  SKINCARE
+  REST
+  PERIOD
+}
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  phone         String?  // For WhatsApp notifications
+  role          UserRole @default(MAIN_USER)
+  partnerId     String?  // Links partner to main user
+  partner       User?    @relation("UserPartnership", fields: [partnerId], references: [id])
+  partnerUsers  User[]   @relation("UserPartnership")
+  
+  // Settings
+  globalSharing           Boolean     @default(false)
+  showWater               Boolean     @default(true)
+  showSkincare            Boolean     @default(true)
+  showRest                Boolean     @default(true)
+  showPeriod              Boolean     @default(false)
+  hideEverything          Boolean     @default(false)
+  periodStartDate         String?     // ISO date string
+  currentNeed             CurrentNeed @default(GENTLE_REMINDERS)
+  waterReminderFrequency  Int         @default(2) // hours
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  dreams       Dream[]
+  thoughts     Thought[]
+  letters      Letter[]
+  moodEntries  MoodEntry[]
+  selfCareItems SelfCareItem[]
+  
+  @@index([partnerId])
+}
+
+model Dream {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title     String
+  content   String   @db.Text
+  mood      Mood
+  shared    Boolean  @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  targets Target[]
+  
+  @@index([userId])
+  @@index([userId, shared])
+}
+
+model Target {
+  id        String      @id @default(cuid())
+  dreamId   String
+  dream     Dream       @relation(fields: [dreamId], references: [id], onDelete: Cascade)
+  
+  text      String
+  state     TargetState @default(STARTING)
+  shared    Boolean     @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([dreamId])
+}
+
+model Thought {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  content   String   @db.Text
+  mood      Mood
+  shared    Boolean  @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([userId, shared])
+}
+
+model Letter {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  content    String   @db.Text
+  unlockDate String?  // ISO date string
+  shared     Boolean  @default(true)
+  sealed     Boolean  @default(false)
+  
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([userId, shared])
+}
+
+model MoodEntry {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  mood      VisitMood
+  date      String     // ISO date string (YYYY-MM-DD)
+  shared    Boolean    @default(false)
+  message   String?    // Motivation message shown
+  
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([userId, date])
+  @@index([userId, shared])
+  @@unique([userId, date])
+}
+
+model SelfCareItem {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  label     String
+  category  SelfCareCategory
+  checked   Boolean         @default(false)
+  date      String          // ISO date string (YYYY-MM-DD)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([userId, date])
+  @@index([userId, category])
+}
