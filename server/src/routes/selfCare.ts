@@ -1,12 +1,11 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
-import { authenticateToken, AuthRequest, requireMainUser } from "../middleware/auth";
+import { AuthRequest, requireMainUser } from "../middleware/auth";
 import { sendWhatsAppNotification } from "../services/whatsapp";
+import { getUserAndPartnerPhones } from "../utils/notifications";
 
 const router = Router();
 const prisma = new PrismaClient();
-
-router.use(authenticateToken);
 router.use(requireMainUser);
 
 // Get self-care items for a date
@@ -84,18 +83,17 @@ router.patch("/:id", async (req: AuthRequest, res) => {
       data: { checked },
     });
 
-    // Notify partner when she completes a self-care task
+    // Notify both main user and partner when she completes a self-care task
     if (checked === true) {
-      const partner = await prisma.user.findFirst({
-        where: { partnerId: req.userId! },
-      });
-      if (partner?.phone) {
+      const targets = await getUserAndPartnerPhones(prisma, req.userId!);
+
+      for (const phone of targets) {
         const result = await sendWhatsAppNotification(
-          partner.phone,
+          phone,
           `She took care of herself: ${existing.label} 💚`
         );
         if (!result.success) {
-          console.error("Failed to notify partner of self-care completion:", result.error);
+          console.error("Failed to notify self-care completion recipient:", result.error, `(${phone})`);
         }
       }
     }

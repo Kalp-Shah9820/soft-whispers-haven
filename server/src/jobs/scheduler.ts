@@ -8,6 +8,7 @@ import {
   getPeriodCareMessage,
   getEmotionalCheckinMessage,
 } from "../utils/messages";
+import { getUserAndPartnerPhones } from "../utils/notifications";
 
 const prisma = new PrismaClient();
 
@@ -36,13 +37,17 @@ cron.schedule("0 9 * * *", async () => {
         });
 
         const message = latestMood?.message || getDailyMessage();
-        const result = await sendWhatsAppNotification(
-          user.phone,
-          `Good morning, ${user.name || "love"} 🌅\n\n${message}`
-        );
-        
-        if (!result.success) {
-          console.error(`   Failed for user ${user.name}: ${result.error}`);
+        const targets = await getUserAndPartnerPhones(prisma, user.id);
+
+        for (const phone of targets) {
+          const result = await sendWhatsAppNotification(
+            phone,
+            `Good morning, ${user.name || "love"} 🌅\n\n${message}`
+          );
+
+          if (!result.success) {
+            console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
+          }
         }
       } catch (error: any) {
         console.error(`   Error sending to user ${user.name}:`, error.message);
@@ -80,12 +85,16 @@ cron.schedule("0 * * * *", async () => {
         // Check if it's time for a reminder based on frequency
         const reminderHour = user.waterReminderFrequency || 2;
         if (currentHour % reminderHour === 0) {
-          const result = await sendWhatsAppNotification(
-            user.phone,
-            getWaterReminderMessage(user.name || undefined)
-          );
-          if (!result.success) {
-            console.error(`   Failed for user ${user.name}: ${result.error}`);
+          const targets = await getUserAndPartnerPhones(prisma, user.id);
+
+          for (const phone of targets) {
+            const result = await sendWhatsAppNotification(
+              phone,
+              getWaterReminderMessage(user.name || undefined)
+            );
+            if (!result.success) {
+              console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
+            }
           }
         }
       } catch (error: any) {
@@ -115,12 +124,16 @@ cron.schedule("0 8,20 * * *", async () => {
       if (!user.phone) continue;
 
       try {
-        const result = await sendWhatsAppNotification(
-          user.phone,
-          getSkincareReminderMessage(isMorning, user.name || undefined)
-        );
-        if (!result.success) {
-          console.error(`   Failed for user ${user.name}: ${result.error}`);
+        const targets = await getUserAndPartnerPhones(prisma, user.id);
+
+        for (const phone of targets) {
+          const result = await sendWhatsAppNotification(
+            phone,
+            getSkincareReminderMessage(isMorning, user.name || undefined)
+          );
+          if (!result.success) {
+            console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
+          }
         }
       } catch (error: any) {
         console.error(`   Error sending skincare reminder to ${user.name}:`, error.message);
@@ -158,12 +171,16 @@ cron.schedule("0 10 * * *", async () => {
       // Typical cycle is 28 days, remind 2-3 days before
       if (daysSince >= 25 && daysSince <= 27) {
         try {
-          const result = await sendWhatsAppNotification(
-            user.phone,
-            getPeriodCareMessage(user.name || undefined)
-          );
-          if (!result.success) {
-            console.error(`   Failed for user ${user.name}: ${result.error}`);
+          const targets = await getUserAndPartnerPhones(prisma, user.id);
+
+          for (const phone of targets) {
+            const result = await sendWhatsAppNotification(
+              phone,
+              getPeriodCareMessage(user.name || undefined)
+            );
+            if (!result.success) {
+              console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
+            }
           }
         } catch (error: any) {
           console.error(`   Error sending period care reminder to ${user.name}:`, error.message);
@@ -206,12 +223,16 @@ cron.schedule("0 12,16,20 * * *", async () => {
       // Only send if mood was logged today and need is set
       if (todayMood && user.currentNeed !== "GENTLE_REMINDERS") {
         try {
-          const result = await sendWhatsAppNotification(
-            user.phone,
-            getEmotionalCheckinMessage(user.currentNeed, user.name || undefined)
-          );
-          if (!result.success) {
-            console.error(`   Failed for user ${user.name}: ${result.error}`);
+          const targets = await getUserAndPartnerPhones(prisma, user.id);
+
+          for (const phone of targets) {
+            const result = await sendWhatsAppNotification(
+              phone,
+              getEmotionalCheckinMessage(user.currentNeed, user.name || undefined)
+            );
+            if (!result.success) {
+              console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
+            }
           }
         } catch (error: any) {
           console.error(`   Error sending emotional check-in to ${user.name}:`, error.message);

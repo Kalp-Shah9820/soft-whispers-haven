@@ -1,13 +1,12 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
-import { authenticateToken, AuthRequest, requireMainUser } from "../middleware/auth";
+import { AuthRequest, requireMainUser } from "../middleware/auth";
 import { sendWhatsAppNotification } from "../services/whatsapp";
 import { getDailyMessage } from "../utils/messages";
+import { getUserAndPartnerPhones } from "../utils/notifications";
 
 const router = Router();
 const prisma = new PrismaClient();
-
-router.use(authenticateToken);
 
 // Get mood history (filtered by role)
 router.get("/history", async (req: AuthRequest, res) => {
@@ -87,19 +86,17 @@ router.post("/log", requireMainUser, async (req: AuthRequest, res) => {
       },
     });
 
-    // Notify partner if shared
+    // Notify both main user and partner if shared
     if (moodEntry.shared && user) {
-      const partner = await prisma.user.findFirst({
-        where: { partnerId: req.userId! },
-      });
+      const targets = await getUserAndPartnerPhones(prisma, req.userId!);
 
-      if (partner?.phone) {
+      for (const phone of targets) {
         const result = await sendWhatsAppNotification(
-          partner.phone,
+          phone,
           `She shared her mood with you today ${moodEntry.mood}`
         );
         if (!result.success) {
-          console.error("Failed to notify partner:", result.error);
+          console.error("Failed to notify mood recipient:", result.error, `(${phone})`);
         }
       }
     }

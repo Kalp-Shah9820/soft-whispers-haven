@@ -1,12 +1,11 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
-import { authenticateToken, AuthRequest, requireMainUser } from "../middleware/auth";
+import { AuthRequest, requireMainUser } from "../middleware/auth";
 import { sendWhatsAppNotification } from "../services/whatsapp";
+import { getUserAndPartnerPhones } from "../utils/notifications";
 
 const router = Router();
 const prisma = new PrismaClient();
-
-router.use(authenticateToken);
 
 // Get all thoughts (filtered by role)
 router.get("/", async (req: AuthRequest, res) => {
@@ -66,23 +65,17 @@ router.post("/", requireMainUser, async (req: AuthRequest, res) => {
       },
     });
 
-    // Notify partner if shared
+    // Notify both main user and partner if shared
     if (shared) {
-      const user = await prisma.user.findUnique({
-        where: { id: req.userId! },
-        include: { partnerUsers: true },
-      });
+      const targets = await getUserAndPartnerPhones(prisma, req.userId!);
 
-      if (user?.partnerUsers.length) {
-        const partner = user.partnerUsers[0];
-        if (partner.phone) {
-          const result = await sendWhatsAppNotification(
-            partner.phone,
-            `She shared a new thought with you 💭`
-          );
-          if (!result.success) {
-            console.error("Failed to notify partner:", result.error);
-          }
+      for (const phone of targets) {
+        const result = await sendWhatsAppNotification(
+          phone,
+          `She shared a new thought with you 💭`
+        );
+        if (!result.success) {
+          console.error("Failed to notify thought recipient:", result.error, `(${phone})`);
         }
       }
     }

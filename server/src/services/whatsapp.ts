@@ -1,4 +1,5 @@
 import twilio from "twilio";
+import { normalizePhoneForWhatsApp } from "../utils/phone";
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -52,31 +53,8 @@ export function getWhatsAppStatus(): { configured: boolean; message: string } {
   return { configured: false, message: "WhatsApp configuration incomplete." };
 }
 
-/**
- * Format phone number for Twilio WhatsApp
- * Twilio requires: whatsapp:+[country code][number]
- * Example: whatsapp:+14155551234
- */
-function formatPhoneNumber(phone: string): string {
-  // Remove any existing whatsapp: prefix
-  let cleaned = phone.replace(/^whatsapp:/, "");
-  
-  // Remove all non-digit characters except +
-  cleaned = cleaned.replace(/[^\d+]/g, "");
-  
-  // If it doesn't start with +, add it (assuming US/Canada if no country code)
-  if (!cleaned.startsWith("+")) {
-    // If it's 10 digits, assume US/Canada and add +1
-    if (cleaned.length === 10) {
-      cleaned = "+1" + cleaned;
-    } else {
-      // Otherwise, add + and assume it's a valid country code
-      cleaned = "+" + cleaned;
-    }
-  }
-  
-  return `whatsapp:${cleaned}`;
-}
+/** Re-export for reuse by other modules */
+export { normalizePhoneForWhatsApp } from "../utils/phone";
 
 export async function sendWhatsAppNotification(
   to: string,
@@ -94,8 +72,8 @@ export async function sendWhatsAppNotification(
   }
 
   try {
-    // Format phone number
-    const formattedTo = formatPhoneNumber(to);
+    // Normalize phone to Twilio E.164 WhatsApp format
+    const formattedTo = normalizePhoneForWhatsApp(to);
     
     console.log(`📤 Attempting to send WhatsApp to ${formattedTo}`);
     console.log(`   From: ${effectiveFromNumber}`);
@@ -125,7 +103,7 @@ export async function sendWhatsAppNotification(
     console.error(`   Error Code: ${error.code}`);
     console.error(`   Error Message: ${error.message}`);
     console.error(`   To: ${to}`);
-    console.error(`   Formatted To: ${formatPhoneNumber(to)}`);
+    console.error(`   Formatted To: ${normalizePhoneForWhatsApp(to)}`);
     
     // Provide helpful error messages
     let errorMessage = error.message;
@@ -146,7 +124,7 @@ export async function sendWhatsAppNotification(
         code: error.code,
         message: error.message,
         to: to,
-        formattedTo: formatPhoneNumber(to),
+        formattedTo: normalizePhoneForWhatsApp(to),
         from: effectiveFromNumber
       }
     };

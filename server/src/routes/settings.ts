@@ -1,12 +1,11 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
-import { authenticateToken, AuthRequest, requireMainUser } from "../middleware/auth";
+import { AuthRequest, requireMainUser } from "../middleware/auth";
 import { sendWhatsAppNotification } from "../services/whatsapp";
+import { getUserAndPartnerPhones } from "../utils/notifications";
 
 const router = Router();
 const prisma = new PrismaClient();
-
-router.use(authenticateToken);
 router.use(requireMainUser);
 
 // Get settings
@@ -129,23 +128,21 @@ router.patch("/", async (req: AuthRequest, res) => {
       }
     }
 
-    // Notify partner if currentNeed changed
+    // Notify both main user and partner if currentNeed changed
     if (currentNeed !== undefined) {
-      const partner = await prisma.user.findFirst({
-        where: { partnerId: req.userId! },
-      });
+      const needMessages: Record<string, string> = {
+        REST: "She might need extra rest today 🤍",
+        SUPPORT: "She might need extra support today 💗",
+        SPACE: "She might need some space today 🌊",
+      };
 
-      if (partner?.phone) {
-        const needMessages: Record<string, string> = {
-          REST: "She might need extra rest today 🤍",
-          SUPPORT: "She might need extra support today 💗",
-          SPACE: "She might need some space today 🌊",
-        };
+      if (needMessages[currentNeed]) {
+        const targets = await getUserAndPartnerPhones(prisma, req.userId!);
 
-        if (needMessages[currentNeed]) {
-          const result = await sendWhatsAppNotification(partner.phone, needMessages[currentNeed]);
+        for (const phone of targets) {
+          const result = await sendWhatsAppNotification(phone, needMessages[currentNeed]);
           if (!result.success) {
-            console.error("Failed to notify partner:", result.error);
+            console.error("Failed to notify need-change recipient:", result.error, `(${phone})`);
           }
         }
       }
