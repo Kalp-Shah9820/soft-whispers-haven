@@ -4,6 +4,9 @@ import { Switch } from "@/components/ui/switch";
 import { Shield, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useHideMode } from "@/lib/hideMode";
+import { toast } from "sonner";
+import { settingsAPI } from "@/lib/api";
+import { useState } from "react";
 
 const NEEDS: { value: CurrentNeed; label: string; emoji: string }[] = [
   { value: "rest", label: "Rest", emoji: "😴" },
@@ -19,10 +22,26 @@ export default function SettingsPage() {
   const [, setRole] = useRole();
   const navigate = useNavigate();
   const { hideMode, enterHideMode, exitHideMode } = useHideMode();
+  const [activating, setActivating] = useState(false);
 
   const update = (patch: Partial<typeof settings>) => setSettings((prev) => ({ ...prev, ...patch }));
   const updateIdentity = (patch: Partial<typeof settings.identity>) =>
     update({ identity: { ...settings.identity, ...patch } });
+
+  const handleActivateNotifications = async () => {
+    setActivating(true);
+    try {
+      await settingsAPI.activateNotifications({
+        userPhone: settings.identity.phone || "",
+        partnerPhone: settings.identity.partnerPhone || "",
+      });
+      toast.success("Notifications activated 💚");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to activate notifications");
+    } finally {
+      setActivating(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -95,6 +114,14 @@ export default function SettingsPage() {
               They’ll get: when you share dreams, thoughts, letters, mood; when you complete a self-care task.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={handleActivateNotifications}
+            disabled={activating}
+            className="w-full mt-2 px-4 py-3 rounded-xl bg-primary/20 text-primary font-medium text-sm hover:bg-primary/30 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {activating ? "Activating…" : "Activate WhatsApp Notifications 💚"}
+          </button>
         </div>
       </div>
 

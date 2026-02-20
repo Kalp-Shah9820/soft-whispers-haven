@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { AuthRequest, requireMainUser } from "../middleware/auth";
 import { sendWhatsAppNotification } from "../services/whatsapp";
 import { getDailyMessage } from "../utils/messages";
-import { getUserAndPartnerPhones } from "../utils/notifications";
+import { getPartnerPhones } from "../utils/notifications";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -86,9 +86,9 @@ router.post("/log", requireMainUser, async (req: AuthRequest, res) => {
       },
     });
 
-    // Notify both main user and partner if shared
+    // Notify partner only (event-based relationship update)
     if (moodEntry.shared && user) {
-      const targets = await getUserAndPartnerPhones(prisma, req.userId!);
+      const targets = await getPartnerPhones(prisma, req.userId!);
 
       for (const phone of targets) {
         const result = await sendWhatsAppNotification(

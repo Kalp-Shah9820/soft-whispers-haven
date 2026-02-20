@@ -2,7 +2,7 @@ import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import { AuthRequest, requireMainUser } from "../middleware/auth";
 import { sendWhatsAppNotification } from "../services/whatsapp";
-import { getUserAndPartnerPhones } from "../utils/notifications";
+import { getPartnerPhones } from "../utils/notifications";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -83,9 +83,9 @@ router.patch("/:id", async (req: AuthRequest, res) => {
       data: { checked },
     });
 
-    // Notify both main user and partner when she completes a self-care task
+    // Notify partner only (event-based relationship update)
     if (checked === true) {
-      const targets = await getUserAndPartnerPhones(prisma, req.userId!);
+      const targets = await getPartnerPhones(prisma, req.userId!);
 
       for (const phone of targets) {
         const result = await sendWhatsAppNotification(

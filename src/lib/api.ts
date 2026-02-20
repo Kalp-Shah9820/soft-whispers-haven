@@ -197,6 +197,12 @@ export const settingsAPI = {
       body: JSON.stringify(data),
     });
   },
+  activateNotifications: async (data: { userPhone: string; partnerPhone: string }) => {
+    return apiRequest<{ success: boolean }>("/settings/notifications", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 };
 
 // Self-care API

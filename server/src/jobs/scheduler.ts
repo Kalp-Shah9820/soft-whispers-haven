@@ -8,7 +8,7 @@ import {
   getPeriodCareMessage,
   getEmotionalCheckinMessage,
 } from "../utils/messages";
-import { getUserAndPartnerPhones } from "../utils/notifications";
+import { getMainUserPhones } from "../utils/notifications";
 
 const prisma = new PrismaClient();
 
@@ -40,7 +40,7 @@ cron.schedule("0 7 * * *", async () => {
         });
 
         const message = latestMood?.message || getDailyMessage();
-        const targets = await getUserAndPartnerPhones(prisma, user.id);
+        const targets = await getMainUserPhones(prisma, user.id);
 
         for (const phone of targets) {
           const result = await sendWhatsAppNotification(
@@ -95,7 +95,7 @@ cron.schedule("0 * * * *", async () => {
       if (!user.phone) continue;
 
       try {
-        const targets = await getUserAndPartnerPhones(prisma, user.id);
+        const targets = await getMainUserPhones(prisma, user.id);
 
         for (const phone of targets) {
           const result = await sendWhatsAppNotification(
@@ -140,7 +140,7 @@ cron.schedule("0 9,21 * * *", async () => {
       if (!user.phone) continue;
 
       try {
-        const targets = await getUserAndPartnerPhones(prisma, user.id);
+        const targets = await getMainUserPhones(prisma, user.id);
 
         for (const phone of targets) {
           const result = await sendWhatsAppNotification(
@@ -194,7 +194,7 @@ cron.schedule("0 10 * * *", async () => {
       // Typical cycle is 28 days, remind 2-3 days before
       if (daysSince >= 25 && daysSince <= 27) {
         try {
-          const targets = await getUserAndPartnerPhones(prisma, user.id);
+          const targets = await getMainUserPhones(prisma, user.id);
 
           for (const phone of targets) {
             const result = await sendWhatsAppNotification(
@@ -253,7 +253,7 @@ cron.schedule("0 12,16,20 * * *", async () => {
       // Only send if mood was logged today and need is set
       if (todayMood && user.currentNeed !== "GENTLE_REMINDERS") {
         try {
-          const targets = await getUserAndPartnerPhones(prisma, user.id);
+          const targets = await getMainUserPhones(prisma, user.id);
 
           for (const phone of targets) {
             const result = await sendWhatsAppNotification(
