@@ -113,6 +113,8 @@ router.patch("/", async (req: AuthRequest, res) => {
           data: {
             name: partnerName,
             phone: partnerPhone,
+            notificationsEnabled: true,
+            onboardingCompleted: true,
           },
         });
       } else if (partnerPhone || partnerName !== "Partner") {
@@ -123,6 +125,8 @@ router.patch("/", async (req: AuthRequest, res) => {
             phone: partnerPhone,
             role: "PARTNER",
             partnerId: req.userId!,
+            notificationsEnabled: true,
+            onboardingCompleted: true,
           },
         });
       }

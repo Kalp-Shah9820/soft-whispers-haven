@@ -13,8 +13,9 @@ import { getUserAndPartnerPhones } from "../utils/notifications";
 const prisma = new PrismaClient();
 
 // Daily motivation at 9 AM
-cron.schedule("0 9 * * *", async () => {
+cron.schedule("0 7 * * *", async () => {
   console.log("🌅 Running daily motivation job...");
+  let messagesSent = 0;
   try {
     const users = await prisma.user.findMany({
       where: {
@@ -22,6 +23,8 @@ cron.schedule("0 9 * * *", async () => {
         phone: { not: null },
       },
     });
+
+    console.log(`   Candidates found (daily motivation): ${users.length}`);
 
     for (const user of users) {
       if (!user.phone) {
@@ -45,7 +48,9 @@ cron.schedule("0 9 * * *", async () => {
             `Good morning, ${user.name || "love"} 🌅\n\n${message}`
           );
 
-          if (!result.success) {
+          if (result.success) {
+            messagesSent += 1;
+          } else {
             console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
           }
         }
@@ -55,12 +60,15 @@ cron.schedule("0 9 * * *", async () => {
     }
   } catch (error: any) {
     console.error("❌ Daily motivation job error:", error);
+  } finally {
+    console.log(`🌅 Daily motivation job finished. Messages sent: ${messagesSent}`);
   }
 });
 
-// Water reminders (every hour, but only for users with water reminders enabled)
+// Water reminders (every 2 hours, 9 AM – 9 PM)
 cron.schedule("0 * * * *", async () => {
   console.log("💧 Running water reminder check...");
+  let messagesSent = 0;
   try {
     const users = await prisma.user.findMany({
       where: {
@@ -70,11 +78,16 @@ cron.schedule("0 * * * *", async () => {
       },
     });
 
+    console.log(`   Candidates found (water): ${users.length}`);
+
     const now = new Date();
     const currentHour = now.getHours();
 
-    // Only send between 8 AM and 10 PM
-    if (currentHour < 8 || currentHour >= 22) {
+    // Only send between 9 AM and 9 PM, every 2 hours (9, 11, 13, ..., 21)
+    if (currentHour < 9 || currentHour > 21) {
+      return;
+    }
+    if ((currentHour - 9) % 2 !== 0) {
       return;
     }
 
@@ -82,19 +95,17 @@ cron.schedule("0 * * * *", async () => {
       if (!user.phone) continue;
 
       try {
-        // Check if it's time for a reminder based on frequency
-        const reminderHour = user.waterReminderFrequency || 2;
-        if (currentHour % reminderHour === 0) {
-          const targets = await getUserAndPartnerPhones(prisma, user.id);
+        const targets = await getUserAndPartnerPhones(prisma, user.id);
 
-          for (const phone of targets) {
-            const result = await sendWhatsAppNotification(
-              phone,
-              getWaterReminderMessage(user.name || undefined)
-            );
-            if (!result.success) {
-              console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
-            }
+        for (const phone of targets) {
+          const result = await sendWhatsAppNotification(
+            phone,
+            getWaterReminderMessage(user.name || undefined)
+          );
+          if (result.success) {
+            messagesSent += 1;
+          } else {
+            console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
           }
         }
       } catch (error: any) {
@@ -103,12 +114,15 @@ cron.schedule("0 * * * *", async () => {
     }
   } catch (error: any) {
     console.error("❌ Water reminder job error:", error);
+  } finally {
+    console.log(`💧 Water reminder job finished. Messages sent: ${messagesSent}`);
   }
 });
 
-// Skincare reminders (morning at 8 AM, evening at 8 PM)
-cron.schedule("0 8,20 * * *", async () => {
+// Skincare reminders (9 AM and 9 PM)
+cron.schedule("0 9,21 * * *", async () => {
   console.log("🧴 Running skincare reminder job...");
+  let messagesSent = 0;
   try {
     const isMorning = new Date().getHours() === 8;
 
@@ -119,6 +133,8 @@ cron.schedule("0 8,20 * * *", async () => {
         showSkincare: true,
       },
     });
+
+    console.log(`   Candidates found (skincare): ${users.length}`);
 
     for (const user of users) {
       if (!user.phone) continue;
@@ -131,7 +147,9 @@ cron.schedule("0 8,20 * * *", async () => {
             phone,
             getSkincareReminderMessage(isMorning, user.name || undefined)
           );
-          if (!result.success) {
+          if (result.success) {
+            messagesSent += 1;
+          } else {
             console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
           }
         }
@@ -141,12 +159,15 @@ cron.schedule("0 8,20 * * *", async () => {
     }
   } catch (error: any) {
     console.error("❌ Skincare reminder job error:", error);
+  } finally {
+    console.log(`🧴 Skincare reminder job finished. Messages sent: ${messagesSent}`);
   }
 });
 
 // Period care reminders (check daily at 10 AM)
 cron.schedule("0 10 * * *", async () => {
   console.log("🌺 Running period care reminder job...");
+  let messagesSent = 0;
   try {
     const users = await prisma.user.findMany({
       where: {
@@ -159,6 +180,8 @@ cron.schedule("0 10 * * *", async () => {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    console.log(`   Candidates found (period care): ${users.length}`);
 
     for (const user of users) {
       if (!user.phone || !user.periodStartDate) continue;
@@ -178,7 +201,9 @@ cron.schedule("0 10 * * *", async () => {
               phone,
               getPeriodCareMessage(user.name || undefined)
             );
-            if (!result.success) {
+            if (result.success) {
+              messagesSent += 1;
+            } else {
               console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
             }
           }
@@ -189,12 +214,15 @@ cron.schedule("0 10 * * *", async () => {
     }
   } catch (error: any) {
     console.error("❌ Period care reminder job error:", error);
+  } finally {
+    console.log(`🌺 Period care reminder job finished. Messages sent: ${messagesSent}`);
   }
 });
 
 // Emotional check-in followups (check every 4 hours during day)
 cron.schedule("0 12,16,20 * * *", async () => {
   console.log("💛 Running emotional check-in job...");
+  let messagesSent = 0;
   try {
     const users = await prisma.user.findMany({
       where: {
@@ -205,6 +233,8 @@ cron.schedule("0 12,16,20 * * *", async () => {
         },
       },
     });
+
+    console.log(`   Candidates found (emotional check-in): ${users.length}`);
 
     for (const user of users) {
       if (!user.phone) continue;
@@ -230,7 +260,9 @@ cron.schedule("0 12,16,20 * * *", async () => {
               phone,
               getEmotionalCheckinMessage(user.currentNeed, user.name || undefined)
             );
-            if (!result.success) {
+            if (result.success) {
+              messagesSent += 1;
+            } else {
               console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
             }
           }
@@ -241,6 +273,8 @@ cron.schedule("0 12,16,20 * * *", async () => {
     }
   } catch (error: any) {
     console.error("❌ Emotional check-in job error:", error);
+  } finally {
+    console.log(`💛 Emotional check-in job finished. Messages sent: ${messagesSent}`);
   }
 });
 

@@ -1,8 +1,9 @@
 import { NavLink } from "@/components/NavLink";
 import { Home, PenLine, BookHeart, Target, Heart, Mail, Eye, Settings, Menu, X, MessageCircle } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSettings, useRole } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
+import { useHideMode } from "@/lib/hideMode";
 
 const navItems = [
   { to: "/", icon: Home, label: "Home", end: true },
@@ -20,11 +21,56 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [settings] = useSettings();
   const [role] = useRole();
+  const { hideMode, exitHideMode } = useHideMode();
+  const [escCount, setEscCount] = useState(0);
 
-  if (settings.hideEverything) {
+  useEffect(() => {
+    if (!hideMode) return;
+
+    let timeoutId: number | undefined;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+
+      setEscCount((prev) => {
+        const next = prev + 1;
+        if (next >= 3) {
+          exitHideMode();
+          return 0;
+        }
+
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+        }
+        timeoutId = window.setTimeout(() => setEscCount(0), 1500);
+        return next;
+      });
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+      setEscCount(0);
+    };
+  }, [hideMode, exitHideMode]);
+
+  if (hideMode) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background gap-4 px-4 text-center">
         <p className="text-muted-foreground text-lg">Nothing to see here 🌿</p>
+        <p className="text-xs text-muted-foreground">
+          Press <span className="font-semibold">Esc</span> three times quickly or use the button below to come back.
+        </p>
+        <button
+          type="button"
+          onClick={exitHideMode}
+          className="px-5 py-2.5 rounded-full text-sm font-medium bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
+        >
+          Exit hide mode 🌸
+        </button>
       </div>
     );
   }

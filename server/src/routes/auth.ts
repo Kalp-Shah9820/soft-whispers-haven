@@ -7,7 +7,43 @@ import { authenticateToken, AuthRequest } from "../middleware/auth";
 const router = Router();
 const prisma = new PrismaClient();
 
-// Register/Initialize user
+// Private-app bootstrap: ensure a MAIN_USER exists and return a JWT.
+// Used by the frontend to transparently "log in" without any UI.
+router.post("/bootstrap", async (req, res) => {
+  try {
+    // Try to find an existing main user
+    let user = await prisma.user.findFirst({
+      where: { role: "MAIN_USER" },
+    });
+
+    if (!user) {
+      // Create a gentle default main user.
+      const name = req.body?.name?.trim() || "Love";
+      user = await prisma.user.create({
+        data: {
+          name,
+          phone: null,
+          role: "MAIN_USER",
+          notificationsEnabled: true,
+          onboardingCompleted: true,
+        },
+      });
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, role: user.role },
+      process.env.JWT_SECRET!,
+      { expiresIn: "365d" }
+    );
+
+    res.json({ user, token });
+  } catch (error: any) {
+    console.error("Bootstrap auth error:", error);
+    res.status(500).json({ error: "Failed to bootstrap authentication" });
+  }
+});
+
+// Legacy-style register (no longer used in normal flow, kept for compatibility)
 router.post("/register", async (req, res) => {
   try {
     const { name, phone, role, partnerId } = req.body;
@@ -41,6 +77,8 @@ router.post("/register", async (req, res) => {
         phone: phone || null,
         role: role === "partner" ? "PARTNER" : "MAIN_USER",
         partnerId: partnerId || null,
+        notificationsEnabled: true,
+        onboardingCompleted: true,
       },
     });
 
@@ -137,6 +175,8 @@ router.post("/link-partner", authenticateToken, async (req: AuthRequest, res) =>
           phone: partnerPhone,
           role: "PARTNER",
           partnerId: mainUser.id,
+          notificationsEnabled: true,
+          onboardingCompleted: true,
         },
       });
     } else {

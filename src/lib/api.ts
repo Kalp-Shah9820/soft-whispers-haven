@@ -47,6 +47,16 @@ async function apiRequest<T>(
 
 // Auth API
 export const authAPI = {
+  // Private-app bootstrap: transparently creates or reuses the main user
+  // and stores a long-lived JWT in localStorage.
+  bootstrap: async (data?: { name?: string }) => {
+    const result = await apiRequest<{ user: any; token: string }>("/auth/bootstrap", {
+      method: "POST",
+      body: JSON.stringify(data || {}),
+    });
+    setAuthToken(result.token);
+    return result;
+  },
   register: async (data: { name: string; phone?: string; role?: "self" | "partner" }) => {
     const result = await apiRequest<{ user: any; token: string }>("/auth/register", {
       method: "POST",

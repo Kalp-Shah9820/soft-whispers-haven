@@ -1,11 +1,9 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
-import { authenticateToken, AuthRequest, requireMainUser } from "../middleware/auth";
+import { AuthRequest, requireMainUser } from "../middleware/auth";
 
 const router = Router();
 const prisma = new PrismaClient();
-
-router.use(authenticateToken);
 
 // Get user profile
 router.get("/profile", async (req: AuthRequest, res) => {

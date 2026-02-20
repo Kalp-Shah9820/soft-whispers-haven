@@ -71,6 +71,8 @@ model User {
   partnerUsers  User[]   @relation("UserPartnership")
   
   // Settings
+  notificationsEnabled    Boolean     @default(true)
+  onboardingCompleted     Boolean     @default(true)
   globalSharing           Boolean     @default(false)
   showWater               Boolean     @default(true)
   showSkincare            Boolean     @default(true)

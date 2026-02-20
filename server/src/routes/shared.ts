@@ -1,11 +1,9 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
-import { authenticateToken, AuthRequest, requirePartner } from "../middleware/auth";
+import { AuthRequest, requirePartner } from "../middleware/auth";
 
 const router = Router();
 const prisma = new PrismaClient();
-
-router.use(authenticateToken);
 router.use(requirePartner);
 
 // Get all shared content
