@@ -85,16 +85,27 @@ router.patch("/:id", async (req: AuthRequest, res) => {
 
     // Notify partner only (event-based relationship update)
     if (checked === true) {
-      const targets = await getPartnerPhones(prisma, req.userId!);
+      try {
+        const targets = await getPartnerPhones(prisma, req.userId!);
+        if (targets.length > 0) {
+          console.log("Partner found");
+          console.log(`Sending partner notification: self-care completion (to ${targets.length} recipient(s))`);
 
-      for (const phone of targets) {
-        const result = await sendWhatsAppNotification(
-          phone,
-          `She took care of herself: ${existing.label} 💚`
-        );
-        if (!result.success) {
-          console.error("Failed to notify self-care completion recipient:", result.error, `(${phone})`);
+          for (const phone of targets) {
+            const result = await sendWhatsAppNotification(
+              phone,
+              "🌿 Your partner completed a self-care activity."
+            );
+            if (result.success) {
+              console.log("Notification sent successfully");
+            } else {
+              console.error("Failed to notify self-care completion recipient:", result.error, `(${phone})`);
+            }
+          }
         }
+      } catch (error: any) {
+        console.error("Error sending partner notification (self-care):", error.message);
+        // Don't crash if partner is missing
       }
     }
 

@@ -5,6 +5,8 @@ import { useDreams, genId, TARGET_STATE_LABELS, type TargetState, type Mood } fr
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { dreamsAPI } from "@/lib/api";
 
 const MOODS: Mood[] = ["😊", "😌", "🌸", "💭", "🌙", "✨", "💪", "🥺", "😴", "🌈"];
 const STATES: TargetState[] = ["starting", "in-progress", "feels-good", "resting"];
@@ -43,9 +45,18 @@ export default function DreamDetail() {
     update({ targets: dream.targets.filter((t) => t.id !== targetId) });
   };
 
-  const deleteDream = () => {
-    setDreams((prev) => prev.filter((d) => d.id !== id));
-    navigate("/dreams");
+  const deleteDream = async () => {
+    if (!id) return;
+    
+    try {
+      await dreamsAPI.delete(id);
+      setDreams((prev) => prev.filter((d) => d.id !== id));
+      toast.success("Dream gently released 🌿");
+      navigate("/dreams");
+    } catch (error: any) {
+      console.error("Failed to delete dream:", error);
+      toast.error(error?.message || "Failed to delete dream");
+    }
   };
 
   return (

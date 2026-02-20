@@ -60,6 +60,8 @@ export async function sendWhatsAppNotification(
   to: string,
   message: string
 ): Promise<{ success: boolean; error?: string; details?: any }> {
+  console.log("Preparing WhatsApp message");
+  
   // Check configuration
   if (!client || !effectiveFromNumber) {
     const mockMessage = `📱 [WhatsApp Mock - Not Configured] To: ${to}, Message: ${message}`;
@@ -75,6 +77,7 @@ export async function sendWhatsAppNotification(
     // Normalize phone to Twilio E.164 WhatsApp format
     const formattedTo = normalizePhoneForWhatsApp(to);
     
+    console.log(`Sending to: ${formattedTo}`);
     console.log(`📤 Attempting to send WhatsApp to ${formattedTo}`);
     console.log(`   From: ${effectiveFromNumber}`);
     console.log(`   Message: ${message.substring(0, 50)}...`);
@@ -85,6 +88,7 @@ export async function sendWhatsAppNotification(
       body: message,
     });
 
+    console.log("Twilio response received");
     console.log(`✅ WhatsApp sent successfully!`);
     console.log(`   Message SID: ${result.sid}`);
     console.log(`   Status: ${result.status}`);

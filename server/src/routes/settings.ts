@@ -134,21 +134,27 @@ router.patch("/", async (req: AuthRequest, res) => {
 
     // Notify partner only when MAIN_USER changes current need (event-based)
     if (currentNeed !== undefined) {
-      const needMessages: Record<string, string> = {
-        REST: "She might need extra rest today 🤍",
-        SUPPORT: "She might need extra support today 💗",
-        SPACE: "She might need some space today 🌊",
-      };
-
-      if (needMessages[currentNeed]) {
+      try {
         const targets = await getPartnerPhones(prisma, req.userId!);
+        if (targets.length > 0) {
+          console.log("Partner found");
+          console.log(`Sending partner notification: needs update (to ${targets.length} recipient(s))`);
 
-        for (const phone of targets) {
-          const result = await sendWhatsAppNotification(phone, needMessages[currentNeed]);
-          if (!result.success) {
-            console.error("Failed to notify need-change recipient:", result.error, `(${phone})`);
+          for (const phone of targets) {
+            const result = await sendWhatsAppNotification(
+              phone,
+              "❤️ Your partner updated what they need right now."
+            );
+            if (result.success) {
+              console.log("Notification sent successfully");
+            } else {
+              console.error("Failed to notify need-change recipient:", result.error, `(${phone})`);
+            }
           }
         }
+      } catch (error: any) {
+        console.error("Error sending partner notification (needs update):", error.message);
+        // Don't crash if partner is missing
       }
     }
 

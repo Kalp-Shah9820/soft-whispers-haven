@@ -121,16 +121,27 @@ router.post("/", requireMainUser, async (req: AuthRequest, res) => {
 
     // Notify partner only (event-based relationship update)
     if (shared) {
-      const targets = await getPartnerPhones(prisma, req.userId!);
+      try {
+        const targets = await getPartnerPhones(prisma, req.userId!);
+        if (targets.length > 0) {
+          console.log("Partner found");
+          console.log(`Sending partner notification: dream (to ${targets.length} recipient(s))`);
 
-      for (const phone of targets) {
-        const result = await sendWhatsAppNotification(
-          phone,
-          `She shared a new dream with you 🌙`
-        );
-        if (!result.success) {
-          console.error("Failed to notify dream recipient:", result.error, `(${phone})`);
+          for (const phone of targets) {
+            const result = await sendWhatsAppNotification(
+              phone,
+              "🌙 A new dream was shared with you."
+            );
+            if (result.success) {
+              console.log("Notification sent successfully");
+            } else {
+              console.error("Failed to notify dream recipient:", result.error, `(${phone})`);
+            }
+          }
         }
+      } catch (error: any) {
+        console.error("Error sending partner notification (dream):", error.message);
+        // Don't crash if partner is missing
       }
     }
 
