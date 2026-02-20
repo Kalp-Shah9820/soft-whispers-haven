@@ -11,9 +11,20 @@ import {
 import { getMainUserPhones } from "../utils/notifications";
 
 const prisma = new PrismaClient();
+const isDevelopment = process.env.NODE_ENV === "development";
 
-// Daily motivation at 9 AM
-cron.schedule("0 7 * * *", async () => {
+// Development mode: run all jobs every 2 minutes
+const DEV_SCHEDULE = "*/2 * * * *";
+
+// Production schedules - individual constants to avoid TypeScript errors
+const dailyMotivationSchedule = isDevelopment ? DEV_SCHEDULE : "0 9 * * *";
+const waterReminderSchedule = isDevelopment ? DEV_SCHEDULE : "0 */2 * * *";
+const skincareSchedule = isDevelopment ? DEV_SCHEDULE : "0 9,21 * * *";
+const periodCareSchedule = isDevelopment ? DEV_SCHEDULE : "0 10 * * *";
+const emotionalCheckinSchedule = isDevelopment ? DEV_SCHEDULE : "0 20 * * *";
+
+// Daily motivation job
+async function runDailyMotivationJob() {
   console.log("🌅 Running daily motivation job...");
   let messagesSent = 0;
   try {
@@ -63,10 +74,10 @@ cron.schedule("0 7 * * *", async () => {
   } finally {
     console.log(`🌅 Daily motivation job finished. Messages sent: ${messagesSent}`);
   }
-});
+}
 
-// Water reminders (every 2 hours, 9 AM – 9 PM)
-cron.schedule("0 * * * *", async () => {
+// Water reminders job
+async function runWaterReminderJob() {
   console.log("💧 Running water reminder check...");
   let messagesSent = 0;
   try {
@@ -84,11 +95,14 @@ cron.schedule("0 * * * *", async () => {
     const currentHour = now.getHours();
 
     // Only send between 9 AM and 9 PM, every 2 hours (9, 11, 13, ..., 21)
-    if (currentHour < 9 || currentHour > 21) {
-      return;
-    }
-    if ((currentHour - 9) % 2 !== 0) {
-      return;
+    // Skip this check in development mode
+    if (!isDevelopment) {
+      if (currentHour < 9 || currentHour > 21) {
+        return;
+      }
+      if ((currentHour - 9) % 2 !== 0) {
+        return;
+      }
     }
 
     for (const user of users) {
@@ -117,14 +131,14 @@ cron.schedule("0 * * * *", async () => {
   } finally {
     console.log(`💧 Water reminder job finished. Messages sent: ${messagesSent}`);
   }
-});
+}
 
-// Skincare reminders (9 AM and 9 PM)
-cron.schedule("0 9,21 * * *", async () => {
+// Skincare reminders job
+async function runSkincareReminderJob() {
   console.log("🧴 Running skincare reminder job...");
   let messagesSent = 0;
   try {
-    const isMorning = new Date().getHours() === 8;
+    const isMorning = new Date().getHours() < 12;
 
     const users = await prisma.user.findMany({
       where: {
@@ -162,10 +176,10 @@ cron.schedule("0 9,21 * * *", async () => {
   } finally {
     console.log(`🧴 Skincare reminder job finished. Messages sent: ${messagesSent}`);
   }
-});
+}
 
-// Period care reminders (check daily at 10 AM)
-cron.schedule("0 10 * * *", async () => {
+// Period care reminders job
+async function runPeriodCareReminderJob() {
   console.log("🌺 Running period care reminder job...");
   let messagesSent = 0;
   try {
@@ -192,7 +206,8 @@ cron.schedule("0 10 * * *", async () => {
       );
 
       // Typical cycle is 28 days, remind 2-3 days before
-      if (daysSince >= 25 && daysSince <= 27) {
+      // In development mode, always send if user has periodStartDate set
+      if (isDevelopment || (daysSince >= 25 && daysSince <= 27)) {
         try {
           const targets = await getMainUserPhones(prisma, user.id);
 
@@ -217,10 +232,10 @@ cron.schedule("0 10 * * *", async () => {
   } finally {
     console.log(`🌺 Period care reminder job finished. Messages sent: ${messagesSent}`);
   }
-});
+}
 
-// Emotional check-in followups (check every 4 hours during day)
-cron.schedule("0 12,16,20 * * *", async () => {
+// Emotional check-in job
+async function runEmotionalCheckinJob() {
   console.log("💛 Running emotional check-in job...");
   let messagesSent = 0;
   try {
@@ -251,7 +266,8 @@ cron.schedule("0 12,16,20 * * *", async () => {
       });
 
       // Only send if mood was logged today and need is set
-      if (todayMood && user.currentNeed !== "GENTLE_REMINDERS") {
+      // In development mode, send even without mood logged
+      if (isDevelopment || (todayMood && user.currentNeed !== "GENTLE_REMINDERS")) {
         try {
           const targets = await getMainUserPhones(prisma, user.id);
 
@@ -276,8 +292,32 @@ cron.schedule("0 12,16,20 * * *", async () => {
   } finally {
     console.log(`💛 Emotional check-in job finished. Messages sent: ${messagesSent}`);
   }
-});
+}
 
 export function setupScheduledJobs() {
-  console.log("⏰ Scheduled jobs initialized");
+  if (isDevelopment) {
+    console.log("🔧 Development mode: All jobs will run every 2 minutes");
+  }
+
+  // Daily motivation job
+  cron.schedule(dailyMotivationSchedule, runDailyMotivationJob);
+  console.log(`✅ Daily motivation job scheduled (${dailyMotivationSchedule})`);
+
+  // Water reminders job
+  cron.schedule(waterReminderSchedule, runWaterReminderJob);
+  console.log(`✅ Water reminder job scheduled (${waterReminderSchedule})`);
+
+  // Skincare reminders job
+  cron.schedule(skincareSchedule, runSkincareReminderJob);
+  console.log(`✅ Skincare reminder job scheduled (${skincareSchedule})`);
+
+  // Period care reminders job
+  cron.schedule(periodCareSchedule, runPeriodCareReminderJob);
+  console.log(`✅ Period reminder job scheduled (${periodCareSchedule})`);
+
+  // Emotional check-in job
+  cron.schedule(emotionalCheckinSchedule, runEmotionalCheckinJob);
+  console.log(`✅ Emotional check-in job scheduled (${emotionalCheckinSchedule})`);
+
+  console.log("⏰ All scheduled jobs initialized and registered");
 }
