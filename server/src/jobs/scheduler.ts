@@ -8,321 +8,252 @@ import {
   getPeriodCareMessage,
   getEmotionalCheckinMessage,
 } from "../utils/messages";
-import { getMainUserPhones } from "../utils/notifications";
 
 const prisma = new PrismaClient();
+const notifLog = (prisma as any).notificationLog;
 
 const cronEnabled = (process.env.CRON_ENABLED || "").toLowerCase() === "true";
 
-// Real production schedules (server local time)
-const dailyMotivationSchedule = "0 9 * * *"; // 9:00 AM
-const emotionalCheckinSchedule = "0 20 * * *"; // 8:00 PM
-const skincareMorningSchedule = "0 8 * * *"; // 8:00 AM
-const skincareEveningSchedule = "0 21 * * *"; // 9:00 PM
-const waterReminderSchedule = "0 9-21/2 * * *"; // every 2 hours between 9 AM–9 PM
-const periodCareSchedule = "0 10 * * *"; // 10:00 AM
+// ---------------------------------------------------------------------------
+// Daily limits per notification type
+// ---------------------------------------------------------------------------
+const DAILY_LIMITS: Record<string, number> = {
+  daily_motivation: 1,
+  water: 8,
+  skincare_am: 1,
+  skincare_pm: 1,
+  period: 4,   // 4 sends per day during active window
+  emotional_checkin: 3,   // 3 nudges per day if no mood logged
+};
 
-// Daily motivation job
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function nowHHMM(): string {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function currentHour(): number { return new Date().getHours(); }
+function currentMinute(): number { return new Date().getMinutes(); }
+
+function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/** How many times has this notification type been sent to this user today? */
+async function countSentToday(userId: string, type: string): Promise<number> {
+  try {
+    return await notifLog.count({
+      where: { userId, type, sentAt: { gte: startOfToday() } },
+    });
+  } catch {
+    return 0;
+  }
+}
+
+/** Returns true if we should skip (daily limit reached). */
+async function limitReached(userId: string, type: string): Promise<boolean> {
+  const limit = DAILY_LIMITS[type] ?? 1;
+  return (await countSentToday(userId, type)) >= limit;
+}
+
+/** Record a send in the log. */
+async function recordSend(userId: string, type: string): Promise<void> {
+  try {
+    await notifLog.create({ data: { userId, type } });
+  } catch { /* non-critical */ }
+}
+
+async function sendToUser(phone: string, message: string): Promise<boolean> {
+  const result = await sendWhatsAppNotification(phone, message);
+  return result.success;
+}
+
+// ---------------------------------------------------------------------------
+// 1. Daily Motivation — once per day at user-selected time
+// ---------------------------------------------------------------------------
 async function runDailyMotivationJob() {
-  console.log("🌅 Running daily motivation job...");
-  let messagesSent = 0;
-  try {
-    const users = await prisma.user.findMany({
-      where: {
-        role: "MAIN_USER",
-        phone: { not: null },
-        notificationsEnabled: true,
-        showRest: true,
-      },
+  if (currentMinute() !== new Date().getMinutes()) return;
+  const now = nowHHMM();
+
+  const users = await prisma.user.findMany({
+    where: { role: "MAIN_USER", phone: { not: null }, notificationsEnabled: true, showRest: true },
+  });
+
+  for (const user of users) {
+    if (!user.phone) continue;
+    const scheduledTime: string = (user as any).dailyMotivationTime ?? "09:00";
+    if (now !== scheduledTime) continue;
+    if (await limitReached(user.id, "daily_motivation")) continue;
+
+    const latestMood = await prisma.moodEntry.findFirst({
+      where: { userId: user.id },
+      orderBy: { date: "desc" },
     });
-
-    console.log(`   Candidates found (daily motivation): ${users.length}`);
-
-    for (const user of users) {
-      if (!user.phone || !user.notificationsEnabled || !user.showRest) {
-        console.log(`   Skipping user ${user.name || user.id} - notifications disabled or showRest=false`);
-        continue;
-      }
-
-      try {
-        // Get latest mood for personalized message
-        const latestMood = await prisma.moodEntry.findFirst({
-          where: { userId: user.id },
-          orderBy: { date: "desc" },
-        });
-
-        const message = latestMood?.message || getDailyMessage();
-        const targets = await getMainUserPhones(prisma, user.id);
-
-        for (const phone of targets) {
-          console.log(`[Daily Motivation] User: ${user.id}, Phone: ${phone}, Name: ${user.name || "N/A"}`);
-          const result = await sendWhatsAppNotification(
-            phone,
-            `Good morning, ${user.name || "love"} 🌅\n\n${message}`
-          );
-
-          if (result.success) {
-            messagesSent += 1;
-          } else {
-            console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
-          }
-        }
-      } catch (error: any) {
-        console.error(`   Error sending to user ${user.name}:`, error.message);
-      }
-    }
-  } catch (error: any) {
-    console.error("❌ Daily motivation job error:", error);
-  } finally {
-    console.log(`🌅 Daily motivation job finished. Messages sent: ${messagesSent}`);
+    const body = latestMood?.message || getDailyMessage();
+    const sent = await sendToUser(
+      user.phone,
+      `Good morning, ${user.name || "love"} 🌅\n\n${body}`
+    );
+    if (sent) await recordSend(user.id, "daily_motivation");
   }
 }
 
-// Water reminders job
+// ---------------------------------------------------------------------------
+// 2. Water Reminder — per-user frequency, 9 AM–9 PM, max 8/day
+// ---------------------------------------------------------------------------
 async function runWaterReminderJob() {
-  console.log("💧 Running water reminder check...");
-  let messagesSent = 0;
-  try {
-    const users = await prisma.user.findMany({
-      where: {
-        role: "MAIN_USER",
-        phone: { not: null },
-        notificationsEnabled: true,
-        showWater: true,
-      },
-    });
+  const hour = currentHour();
+  if (currentMinute() !== new Date().getMinutes()) return;       // top of hour only
+  if (hour < 9 || hour > 21) return;
 
-    console.log(`   Candidates found (water): ${users.length}`);
+  const users = await prisma.user.findMany({
+    where: { role: "MAIN_USER", phone: { not: null }, notificationsEnabled: true, showWater: true },
+  });
 
-    // Safety guard (cron should already enforce this)
-    const currentHour = new Date().getHours();
-    if (currentHour < 9 || currentHour > 21) return;
-    if ((currentHour - 9) % 2 !== 0) return;
+  for (const user of users) {
+    if (!user.phone) continue;
+    const freq: number = user.waterReminderFrequency ?? 2;
+    if ((hour - 9) % freq !== 0) continue;   // respect per-user frequency
+    if (await limitReached(user.id, "water")) continue;
 
-    for (const user of users) {
-      if (!user.phone || !user.notificationsEnabled || !user.showWater) continue;
-
-      try {
-        const targets = await getMainUserPhones(prisma, user.id);
-
-        for (const phone of targets) {
-          console.log(`[Water Reminder] User: ${user.id}, Phone: ${phone}, Name: ${user.name || "N/A"}`);
-          const result = await sendWhatsAppNotification(
-            phone,
-            getWaterReminderMessage(user.name || undefined)
-          );
-          if (result.success) {
-            messagesSent += 1;
-          } else {
-            console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
-          }
-        }
-      } catch (error: any) {
-        console.error(`   Error sending water reminder to ${user.name}:`, error.message);
-      }
-    }
-  } catch (error: any) {
-    console.error("❌ Water reminder job error:", error);
-  } finally {
-    console.log(`💧 Water reminder job finished. Messages sent: ${messagesSent}`);
+    const sent = await sendToUser(user.phone, getWaterReminderMessage(user.name || undefined));
+    if (sent) await recordSend(user.id, "water");
   }
 }
 
-// Skincare reminders job
-async function runSkincareReminderJob(isMorning: boolean) {
-  console.log(`🧴 Running skincare reminder job (${isMorning ? "morning" : "evening"})...`);
-  let messagesSent = 0;
-  try {
-    const users = await prisma.user.findMany({
-      where: {
-        role: "MAIN_USER",
-        phone: { not: null },
-        notificationsEnabled: true,
-        showSkincare: true,
-      },
-    });
+// ---------------------------------------------------------------------------
+// 3. Skincare — max 1 AM + 1 PM per day
+// ---------------------------------------------------------------------------
+async function runSkincareReminderJob() {
+  if (currentMinute() !== new Date().getMinutes()) return;
+  const now = nowHHMM();
 
-    console.log(`   Candidates found (skincare): ${users.length}`);
+  const users = await prisma.user.findMany({
+    where: { role: "MAIN_USER", phone: { not: null }, notificationsEnabled: true, showSkincare: true },
+  });
 
-    for (const user of users) {
-      if (!user.phone || !user.notificationsEnabled || !user.showSkincare) continue;
+  for (const user of users) {
+    if (!user.phone) continue;
+    const morningTime: string = (user as any).skincareReminderTime ?? "08:00";
+    const [morningHour] = morningTime.split(":").map(Number);
+    const eveningTime = `${String((morningHour + 13) % 24).padStart(2, "0")}:00`;
 
-      try {
-        const targets = await getMainUserPhones(prisma, user.id);
-
-        for (const phone of targets) {
-          console.log(
-            `[Skincare Reminder:${isMorning ? "AM" : "PM"}] User: ${user.id}, Phone: ${phone}, Name: ${
-              user.name || "N/A"
-            }`
-          );
-          const result = await sendWhatsAppNotification(
-            phone,
-            getSkincareReminderMessage(isMorning, user.name || undefined)
-          );
-          if (result.success) {
-            messagesSent += 1;
-          } else {
-            console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
-          }
-        }
-      } catch (error: any) {
-        console.error(`   Error sending skincare reminder to ${user.name}:`, error.message);
-      }
+    if (now === morningTime && !(await limitReached(user.id, "skincare_am"))) {
+      const sent = await sendToUser(user.phone, getSkincareReminderMessage(true, user.name || undefined));
+      if (sent) await recordSend(user.id, "skincare_am");
+    } else if (now === eveningTime && !(await limitReached(user.id, "skincare_pm"))) {
+      const sent = await sendToUser(user.phone, getSkincareReminderMessage(false, user.name || undefined));
+      if (sent) await recordSend(user.id, "skincare_pm");
     }
-  } catch (error: any) {
-    console.error("❌ Skincare reminder job error:", error);
-  } finally {
-    console.log(`🧴 Skincare reminder job finished. Messages sent: ${messagesSent}`);
   }
 }
 
-// Period care reminders job
+// ---------------------------------------------------------------------------
+// 4. Period Care — max 4/day during active window (D0–D5), every 4 hours
+// ---------------------------------------------------------------------------
 async function runPeriodCareReminderJob() {
-  console.log("🌺 Running period care reminder job...");
-  let messagesSent = 0;
-  try {
-    const users = await prisma.user.findMany({
-      where: {
-        role: "MAIN_USER",
-        phone: { not: null },
-        notificationsEnabled: true,
-        showPeriod: true,
-        periodStartDate: { not: null },
-      },
-    });
+  const hour = currentHour();
+  if (currentMinute() !== new Date().getMinutes()) return;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  // Send at 09:00, 13:00, 17:00, 21:00
+  const PERIOD_HOURS = [9, 13, 17, 21];
+  if (!PERIOD_HOURS.includes(hour)) return;
 
-    console.log(`   Candidates found (period care): ${users.length}`);
+  const users = await prisma.user.findMany({
+    where: {
+      role: "MAIN_USER",
+      phone: { not: null },
+      notificationsEnabled: true,
+      showPeriod: true,
+      periodStartDate: { not: null },
+    },
+  });
 
-    for (const user of users) {
-      if (!user.phone || !user.notificationsEnabled || !user.showPeriod || !user.periodStartDate) continue;
+  const todayMidnight = startOfToday();
 
-      const lastPeriod = new Date(user.periodStartDate);
-      const daysSinceStart = Math.floor(
-        (today.getTime() - lastPeriod.getTime()) / (1000 * 60 * 60 * 24)
-      );
+  for (const user of users) {
+    if (!user.phone || !user.periodStartDate) continue;
+    if ((user as any).periodReminderEnabled === false) continue;
+    if (await limitReached(user.id, "period")) continue;
 
-      // Period care: only if periodStartDate is within the last 5 days (inclusive)
-      if (daysSinceStart >= 0 && daysSinceStart <= 5) {
-        try {
-          const targets = await getMainUserPhones(prisma, user.id);
+    const lastPeriod = new Date(user.periodStartDate);
+    lastPeriod.setHours(0, 0, 0, 0);
+    const daysSince = Math.floor((todayMidnight.getTime() - lastPeriod.getTime()) / 86_400_000);
+    if (daysSince < 0 || daysSince > 5) continue;
 
-          for (const phone of targets) {
-            console.log(`[Period Care Reminder] User: ${user.id}, Phone: ${phone}, Name: ${user.name || "N/A"}`);
-            const result = await sendWhatsAppNotification(
-              phone,
-              getPeriodCareMessage(user.name || undefined)
-            );
-            if (result.success) {
-              messagesSent += 1;
-            } else {
-              console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
-            }
-          }
-        } catch (error: any) {
-          console.error(`   Error sending period care reminder to ${user.name}:`, error.message);
-        }
-      }
-    }
-  } catch (error: any) {
-    console.error("❌ Period care reminder job error:", error);
-  } finally {
-    console.log(`🌺 Period care reminder job finished. Messages sent: ${messagesSent}`);
+    // Pass how many we've already sent today so the message text rotates
+    const sendCount = await countSentToday(user.id, "period");
+    const sent = await sendToUser(user.phone, getPeriodCareMessage(user.name || undefined, sendCount));
+    if (sent) await recordSend(user.id, "period");
   }
 }
 
-// Emotional check-in job
+// ---------------------------------------------------------------------------
+// 5. Emotional Check-in — max 3/day, only if mood NOT yet logged
+// ---------------------------------------------------------------------------
 async function runEmotionalCheckinJob() {
-  console.log("💛 Running emotional check-in job...");
-  let messagesSent = 0;
-  try {
-    const users = await prisma.user.findMany({
-      where: {
-        role: "MAIN_USER",
-        phone: { not: null },
-        notificationsEnabled: true,
-        currentNeed: {
-          in: ["REST", "MOTIVATION", "SUPPORT", "SPACE"],
-        },
-      },
+  if (currentMinute() !== new Date().getMinutes()) return;
+  const hour = currentHour();
+
+  // Send at user's selected time, then re-send at +2h and +4h if still no mood
+  const users = await prisma.user.findMany({
+    where: {
+      role: "MAIN_USER",
+      phone: { not: null },
+      notificationsEnabled: true,
+      currentNeed: { in: ["REST", "MOTIVATION", "SUPPORT", "SPACE"] },
+    },
+  });
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  for (const user of users) {
+    if (!user.phone) continue;
+    if ((user as any).emotionalCheckinEnabled === false) continue;
+    if (await limitReached(user.id, "emotional_checkin")) continue;
+
+    const baseHour = parseInt(((user as any).emotionalCheckinTime ?? "20:00").split(":")[0], 10);
+    const allowedHours = [baseHour, (baseHour + 2) % 24, (baseHour + 4) % 24];
+    if (!allowedHours.includes(hour)) continue;
+
+    // Only nudge if mood not yet logged today
+    const hasMoodToday = await prisma.moodEntry.findUnique({
+      where: { userId_date: { userId: user.id, date: today } },
     });
+    if (hasMoodToday) continue;
 
-    console.log(`   Candidates found (emotional check-in): ${users.length}`);
-
-    for (const user of users) {
-      if (!user.phone || !user.notificationsEnabled) continue;
-
-      // Only send once per day per need type
-      const today = new Date().toISOString().slice(0, 10);
-      const todayMood = await prisma.moodEntry.findUnique({
-        where: {
-          userId_date: {
-            userId: user.id,
-            date: today,
-          },
-        },
-      });
-
-      // Only send if mood was logged today and need is set
-      if (todayMood && user.currentNeed !== "GENTLE_REMINDERS") {
-        try {
-          const targets = await getMainUserPhones(prisma, user.id);
-
-          for (const phone of targets) {
-            console.log(`[Emotional Check-in] User: ${user.id}, Phone: ${phone}, Name: ${user.name || "N/A"}`);
-            const result = await sendWhatsAppNotification(
-              phone,
-              getEmotionalCheckinMessage(user.currentNeed, user.name || undefined)
-            );
-            if (result.success) {
-              messagesSent += 1;
-            } else {
-              console.error(`   Failed for user ${user.name} (${phone}): ${result.error}`);
-            }
-          }
-        } catch (error: any) {
-          console.error(`   Error sending emotional check-in to ${user.name}:`, error.message);
-        }
-      }
-    }
-  } catch (error: any) {
-    console.error("❌ Emotional check-in job error:", error);
-  } finally {
-    console.log(`💛 Emotional check-in job finished. Messages sent: ${messagesSent}`);
+    const sendCount = await countSentToday(user.id, "emotional_checkin");
+    const sent = await sendToUser(
+      user.phone,
+      getEmotionalCheckinMessage(user.currentNeed, user.name || undefined, sendCount)
+    );
+    if (sent) await recordSend(user.id, "emotional_checkin");
   }
 }
 
+// ---------------------------------------------------------------------------
+// Master: single per-minute cron — no immediate fire on startup
+// ---------------------------------------------------------------------------
 export function setupScheduledJobs() {
   if (!cronEnabled) {
-    console.log("⛔ CRON is disabled (set CRON_ENABLED=true to enable scheduled jobs).");
+    console.log("⛔ CRON disabled (CRON_ENABLED=true to enable).");
     return;
   }
 
-  // Daily motivation job
-  cron.schedule(dailyMotivationSchedule, runDailyMotivationJob);
-  console.log(`✅ Daily motivation job scheduled (${dailyMotivationSchedule})`);
+  cron.schedule("* * * * *", async () => {
+    await Promise.allSettled([
+      runDailyMotivationJob(),
+      runWaterReminderJob(),
+      runSkincareReminderJob(),
+      runPeriodCareReminderJob(),
+      runEmotionalCheckinJob(),
+    ]);
+  });
 
-  // Water reminders job
-  cron.schedule(waterReminderSchedule, runWaterReminderJob);
-  console.log(`✅ Water reminder job scheduled (${waterReminderSchedule})`);
-
-  // Skincare reminders jobs (morning + evening)
-  cron.schedule(skincareMorningSchedule, () => runSkincareReminderJob(true));
-  console.log(`✅ Skincare reminder job scheduled (${skincareMorningSchedule})`);
-
-  cron.schedule(skincareEveningSchedule, () => runSkincareReminderJob(false));
-  console.log(`✅ Skincare reminder job scheduled (${skincareEveningSchedule})`);
-
-  // Period care reminders job
-  cron.schedule(periodCareSchedule, runPeriodCareReminderJob);
-  console.log(`✅ Period reminder job scheduled (${periodCareSchedule})`);
-
-  // Emotional check-in job
-  cron.schedule(emotionalCheckinSchedule, runEmotionalCheckinJob);
-  console.log(`✅ Emotional check-in job scheduled (${emotionalCheckinSchedule})`);
-
-  console.log("⏰ All scheduled jobs initialized and registered");
+  console.log("⏰ Scheduler started (per-minute, user-driven).");
 }

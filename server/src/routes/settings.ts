@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import { AuthRequest, requireMainUser } from "../middleware/auth";
-import { sendWhatsAppNotification } from "../services/whatsapp";
-import { getPartnerInfo } from "../utils/notifications";
+import { notifyPartner } from "../services/notifyPartner";
+import { partnerMsg } from "../utils/messages";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -58,8 +58,7 @@ router.get("/", async (req: AuthRequest, res) => {
     };
 
     res.json({ settings });
-  } catch (error: any) {
-    console.error("Get settings error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to get settings" });
   }
 });
@@ -132,74 +131,55 @@ router.patch("/", async (req: AuthRequest, res) => {
       }
     }
 
-    // Notify partner only when MAIN_USER changes current need (event-based)
+    // Notify partner when currentNeed changes (real-time event)
     if (currentNeed !== undefined) {
-      try {
-        const partnerInfo = await getPartnerInfo(prisma, req.userId!);
-        if (partnerInfo) {
-          console.log("Partner found");
-          console.log(`[Partner Notification: Needs Update] User: ${req.userId!}, Partner Phone: ${partnerInfo.phone}, Partner Name: ${partnerInfo.name}`);
-          console.log(`Sending partner notification: needs update`);
-
-          const result = await sendWhatsAppNotification(
-            partnerInfo.phone,
-            `❤️ ${user.name || "Your partner"} updated what they need right now.`
-          );
-          if (result.success) {
-            console.log("Notification sent successfully");
-          } else {
-            console.error("Failed to notify need-change recipient:", result.error, `(${partnerInfo.phone})`);
-          }
-        }
-      } catch (error: any) {
-        console.error("Error sending partner notification (needs update):", error.message);
-        // Don't crash if partner is missing
-      }
+      notifyPartner(prisma, req.userId!, partnerMsg("need", user.name || ""));
     }
 
     res.json({ settings: user });
-  } catch (error: any) {
-    console.error("Update settings error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to update settings" });
   }
 });
 
-// Register for WhatsApp notifications: save phones, enable notifications, link partner
+// Register for WhatsApp notifications: save names + phones, enable notifications, link partner
 router.post("/notifications", async (req: AuthRequest, res) => {
   try {
-    const { userPhone, partnerPhone } = req.body;
+    const { userPhone, partnerPhone, userName, partnerName } = req.body;
 
     const mainUserId = req.userId!;
 
-    // Update current (main) user: save phone and enable notifications
+    // Save main user name + phone and enable notifications
     const userPhoneTrimmed = typeof userPhone === "string" ? userPhone.trim() || null : null;
     await prisma.user.update({
       where: { id: mainUserId },
       data: {
-        phone: userPhoneTrimmed,
+        ...(userPhoneTrimmed !== undefined && { phone: userPhoneTrimmed }),
+        ...(typeof userName === "string" && userName.trim() && { name: userName.trim() }),
         notificationsEnabled: true,
       },
     });
 
-    // Partner phone (optional): update or create linked partner
+    // Save partner: update or create with real name and phone
     const partnerPhoneTrimmed = typeof partnerPhone === "string" ? partnerPhone.trim() || null : null;
-    const existingPartner = await prisma.user.findFirst({
-      where: { partnerId: mainUserId },
-    });
+    const resolvedPartnerName = typeof partnerName === "string" && partnerName.trim() ? partnerName.trim() : "Partner";
+
+    const existingPartner = await prisma.user.findFirst({ where: { partnerId: mainUserId } });
 
     if (existingPartner) {
       await prisma.user.update({
         where: { id: existingPartner.id },
         data: {
-          phone: partnerPhoneTrimmed,
+          name: resolvedPartnerName,
+          ...(partnerPhoneTrimmed !== undefined && { phone: partnerPhoneTrimmed }),
           notificationsEnabled: true,
           onboardingCompleted: true,
         },
       });
-    } else if (partnerPhoneTrimmed) {
+    } else if (partnerPhoneTrimmed || resolvedPartnerName !== "Partner") {
       await prisma.user.create({
         data: {
-          name: "Partner",
+          name: resolvedPartnerName,
           phone: partnerPhoneTrimmed,
           role: "PARTNER",
           partnerId: mainUserId,
@@ -211,7 +191,6 @@ router.post("/notifications", async (req: AuthRequest, res) => {
 
     res.json({ success: true });
   } catch (error: any) {
-    console.error("Activate notifications error:", error);
     res.status(500).json({ error: error?.message || "Failed to activate notifications" });
   }
 });

@@ -1,11 +1,10 @@
-// API client for backend communication
+// Central API client — all requests go through apiRequest() below.
+// Set VITE_API_URL in your frontend .env to override the default.
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:3001/api";
 
-// Ensure API base URL is always http://localhost:3001/api (backend server)
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
-
-// Validate API base URL at module load
-if (!API_BASE_URL.startsWith("http://localhost:3001/api") && !API_BASE_URL.includes("://")) {
-  console.warn(`⚠️ API_BASE_URL may be misconfigured: ${API_BASE_URL}. Expected: http://localhost:3001/api`);
+// Sanity-check at module load: catch obvious mis-configurations.
+if (!API_BASE_URL.startsWith("http://") && !API_BASE_URL.startsWith("https://")) {
+  console.error(`❌ VITE_API_URL is misconfigured: "${API_BASE_URL}". It must start with http:// or https://.`);
 }
 
 // Get auth token from localStorage
@@ -224,12 +223,13 @@ export const settingsAPI = {
       body: JSON.stringify(data),
     });
   },
-  activateNotifications: async (data: { userPhone: string; partnerPhone: string }) => {
+  activateNotifications: async (data: { userPhone: string; partnerPhone: string; userName?: string; partnerName?: string }) => {
     return apiRequest<{ success: boolean }>("/settings/notifications", {
       method: "POST",
       body: JSON.stringify(data),
     });
   },
+
 };
 
 // Self-care API

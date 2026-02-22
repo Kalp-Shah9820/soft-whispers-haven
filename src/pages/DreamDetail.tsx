@@ -2,47 +2,45 @@ import { useState, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useDreamsAPI } from "@/lib/store-api";
-import { dreamsAPI, mapMoodToDB, mapTargetStateToDB } from "@/lib/api";
+import { dreamsAPI, mapMoodToDB, mapTargetStateToDB, mapTargetStateFromDB } from "@/lib/api";
 import { TARGET_STATE_LABELS, type TargetState, type Mood } from "@/lib/store";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Loader2 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 const MOODS: Mood[] = ["😊", "😌", "🌸", "💭", "🌙", "✨", "💪", "🥺", "😴", "🌈"];
 const STATES: TargetState[] = ["starting", "in-progress", "feels-good", "resting"];
 
-// Generate a random ID for optimistic UI (will be replaced by real ID after API response)
 const genTempId = () => `temp-${Math.random().toString(36).slice(2, 10)}`;
 
 export default function DreamDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [dreams, setDreams] = useDreamsAPI();
-  const dream = dreams.find((d) => d.id === id);
+
+  // ── ALL hooks must be declared before any early return ──────────────────
   const [newTarget, setNewTarget] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Toast dedup: same message within 5 s is suppressed
+  const lastToastRef = useRef<{ msg: string; at: number }>({ msg: "", at: 0 });
 
-  if (!dream) {
-    return (
-      <div className="text-center py-16">
-        <p className="text-muted-foreground">This dream seems to have floated away 🌙</p>
-        <Link to="/dreams" className="text-primary text-sm mt-4 inline-block hover:underline">← Back to dreams</Link>
-      </div>
-    );
-  }
+  const showError = useCallback((msg: string) => {
+    const now = Date.now();
+    if (lastToastRef.current.msg === msg && now - lastToastRef.current.at < 5000) return;
+    lastToastRef.current = { msg, at: now };
+    toast.error(msg);
+  }, []);
 
-  // Optimistically update local state and debounce the API call
   const update = useCallback(
-    (patch: Partial<typeof dream>) => {
+    (patch: Partial<{ title: string; content: string; mood: Mood; shared: boolean; targets: any[] }>) => {
       const now = new Date().toISOString();
-      setDreams((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, ...patch, updatedAt: now } : d))
-      );
+      setDreams((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch, updatedAt: now } : d)));
 
-      // Debounce API save
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      setSaving(true);
       saveTimeoutRef.current = setTimeout(async () => {
         try {
           const apiPatch: Record<string, any> = {};
@@ -59,8 +57,7 @@ export default function DreamDetail() {
             }));
           }
           const { dream: updated } = await dreamsAPI.update(id!, apiPatch);
-          // Sync with real IDs from backend (especially for new targets)
-          if (updated && updated.targets) {
+          if (updated?.targets) {
             setDreams((prev) =>
               prev.map((d) =>
                 d.id === id
@@ -70,7 +67,7 @@ export default function DreamDetail() {
                       id: t.id,
                       dreamId: t.dreamId,
                       text: t.text,
-                      state: t.state,
+                      state: mapTargetStateFromDB(t.state),
                       shared: t.shared,
                     })),
                   }
@@ -78,14 +75,30 @@ export default function DreamDetail() {
               )
             );
           }
-        } catch (error) {
-          console.error("Failed to save dream:", error);
-          toast.error("Couldn't save changes 🌙");
+        } catch (error: any) {
+          const msg = error?.message?.includes("Access denied")
+            ? "Access denied — please refresh 🌙"
+            : "Couldn't save changes 🌙";
+          showError(msg);
+        } finally {
+          setSaving(false);
         }
-      }, 600);
+      }, 800);
     },
-    [id, setDreams]
+    [id, setDreams, showError]
   );
+  // ────────────────────────────────────────────────────────────────────────
+
+  // Early return AFTER all hooks
+  const dream = dreams.find((d) => d.id === id);
+  if (!dream) {
+    return (
+      <div className="text-center py-16 space-y-4">
+        <p className="text-muted-foreground text-lg">This dream seems to have floated away 🌙</p>
+        <Link to="/dreams" className="text-primary text-sm hover:underline">← Back to dreams</Link>
+      </div>
+    );
+  }
 
   const addTarget = () => {
     if (!newTarget.trim()) return;
@@ -98,13 +111,11 @@ export default function DreamDetail() {
     setNewTarget("");
   };
 
-  const updateTarget = (targetId: string, patch: any) => {
+  const updateTarget = (targetId: string, patch: any) =>
     update({ targets: dream.targets.map((t) => (t.id === targetId ? { ...t, ...patch } : t)) });
-  };
 
-  const removeTarget = (targetId: string) => {
+  const removeTarget = (targetId: string) =>
     update({ targets: dream.targets.filter((t) => t.id !== targetId) });
-  };
 
   const deleteDream = async () => {
     if (!id || deleting) return;
@@ -115,7 +126,6 @@ export default function DreamDetail() {
       toast.success("Dream released 🌙");
       navigate("/dreams");
     } catch (error: any) {
-      console.error(`Failed to delete dream ${id}:`, error);
       toast.error(error?.message || "Failed to delete dream");
     } finally {
       setDeleting(false);
@@ -124,9 +134,16 @@ export default function DreamDetail() {
 
   return (
     <div className="space-y-6">
-      <Link to="/dreams" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-        <ArrowLeft className="h-4 w-4" /> My Dreams
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link to="/dreams" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft className="h-4 w-4" /> My Dreams
+        </Link>
+        {saving && (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" /> Saving…
+          </span>
+        )}
+      </div>
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
         <div className="flex items-center gap-3">
@@ -139,7 +156,6 @@ export default function DreamDetail() {
           />
         </div>
 
-        {/* Mood picker */}
         <div className="flex gap-2 flex-wrap">
           {MOODS.map((m) => (
             <button
@@ -164,7 +180,6 @@ export default function DreamDetail() {
         </div>
       </motion.div>
 
-      {/* Gentle targets */}
       <div className="space-y-4">
         <h2 className="text-lg font-display font-light text-foreground">Gentle Steps 🌱</h2>
 
@@ -185,8 +200,7 @@ export default function DreamDetail() {
                     <button
                       key={s}
                       onClick={() => updateTarget(target.id, { state: s })}
-                      className={`text-xs px-3 py-1.5 rounded-full transition-colors ${target.state === s ? "bg-primary/20 text-primary font-medium" : "bg-secondary/40 text-muted-foreground hover:bg-secondary/60"
-                        }`}
+                      className={`text-xs px-3 py-1.5 rounded-full transition-colors ${target.state === s ? "bg-primary/20 text-primary font-medium" : "bg-secondary/40 text-muted-foreground hover:bg-secondary/60"}`}
                     >
                       {si.emoji} {si.label}
                     </button>
@@ -202,7 +216,6 @@ export default function DreamDetail() {
           );
         })}
 
-        {/* Add target */}
         <div className="flex gap-2">
           <input
             type="text"
@@ -218,13 +231,12 @@ export default function DreamDetail() {
         </div>
       </div>
 
-      {/* Delete */}
       <button
         onClick={deleteDream}
         disabled={deleting}
-        className="text-xs text-muted-foreground hover:text-destructive transition-colors mt-8 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="text-xs text-muted-foreground hover:text-destructive transition-colors mt-8 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
       >
-        {deleting ? "Letting go…" : "Gently let go of this dream"}
+        {deleting ? <><Loader2 className="h-3 w-3 animate-spin" /> Letting go…</> : "Gently let go of this dream"}
       </button>
     </div>
   );

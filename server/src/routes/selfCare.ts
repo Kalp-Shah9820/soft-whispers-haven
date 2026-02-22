@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import { AuthRequest, requireMainUser } from "../middleware/auth";
-import { sendWhatsAppNotification } from "../services/whatsapp";
-import { getPartnerInfo } from "../utils/notifications";
+import { notifyPartner } from "../services/notifyPartner";
+import { partnerMsg } from "../utils/messages";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -12,42 +12,27 @@ router.use(requireMainUser);
 router.get("/:date", async (req: AuthRequest, res) => {
   try {
     const { date } = req.params;
-
     const items = await prisma.selfCareItem.findMany({
-      where: {
-        userId: req.userId!,
-        date,
-      },
+      where: { userId: req.userId!, date },
       orderBy: { createdAt: "asc" },
     });
-
     res.json({ items });
-  } catch (error: any) {
-    console.error("Get self-care items error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to get self-care items" });
   }
 });
 
-// Create or update self-care items
+// Create or replace self-care items for given dates
 router.post("/", async (req: AuthRequest, res) => {
   try {
     const { items } = req.body;
+    if (!Array.isArray(items)) return res.status(400).json({ error: "Items array is required" });
 
-    if (!Array.isArray(items)) {
-      return res.status(400).json({ error: "Items array is required" });
-    }
-
-    // Delete existing items for the dates
     const dates = [...new Set(items.map((i: any) => i.date))];
-    await prisma.selfCareItem.deleteMany({
-      where: {
-        userId: req.userId!,
-        date: { in: dates },
-      },
-    });
+    await prisma.selfCareItem.deleteMany({ where: { userId: req.userId!, date: { in: dates } } });
 
-    // Create new items
-    const created = await prisma.selfCareItem.createMany({
+    // createMany doesn't return rows — use a findMany after to return real IDs
+    await prisma.selfCareItem.createMany({
       data: items.map((item: any) => ({
         userId: req.userId!,
         label: item.label,
@@ -57,61 +42,37 @@ router.post("/", async (req: AuthRequest, res) => {
       })),
     });
 
+    const created = await prisma.selfCareItem.findMany({
+      where: { userId: req.userId!, date: { in: dates } },
+      orderBy: { createdAt: "asc" },
+    });
+
     res.json({ items: created });
-  } catch (error: any) {
-    console.error("Create self-care items error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to create self-care items" });
   }
 });
 
-// Update single self-care item
+// Update single self-care item (toggle checked)
 router.patch("/:id", async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { checked } = req.body;
 
-    const existing = await prisma.selfCareItem.findUnique({
-      where: { id },
-    });
-
-    if (!existing || existing.userId !== req.userId) {
+    const existing = await prisma.selfCareItem.findUnique({ where: { id } });
+    if (!existing || existing.userId !== req.userId)
       return res.status(403).json({ error: "Access denied" });
-    }
 
-    const item = await prisma.selfCareItem.update({
-      where: { id },
-      data: { checked },
-    });
+    const item = await prisma.selfCareItem.update({ where: { id }, data: { checked } });
 
-    // Notify partner only (event-based relationship update)
+    // Only notify partner when an item is checked (not unchecked)
     if (checked === true) {
-      try {
-        const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { name: true } });
-        const partnerInfo = await getPartnerInfo(prisma, req.userId!);
-        if (partnerInfo) {
-          console.log("Partner found");
-          console.log(`[Partner Notification: Self-Care] User: ${req.userId!}, Partner Phone: ${partnerInfo.phone}, Partner Name: ${partnerInfo.name}`);
-          console.log(`Sending partner notification: self-care completion`);
-
-          const result = await sendWhatsAppNotification(
-            partnerInfo.phone,
-            `🌿 ${user?.name || "Your partner"} completed a self-care step: ${existing.label}`
-          );
-          if (result.success) {
-            console.log("Notification sent successfully");
-          } else {
-            console.error("Failed to notify self-care completion recipient:", result.error, `(${partnerInfo.phone})`);
-          }
-        }
-      } catch (error: any) {
-        console.error("Error sending partner notification (self-care):", error.message);
-        // Don't crash if partner is missing
-      }
+      const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { name: true } });
+      notifyPartner(prisma, req.userId!, partnerMsg("selfcare", user?.name || ""));
     }
 
     res.json({ item });
-  } catch (error: any) {
-    console.error("Update self-care item error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to update self-care item" });
   }
 });

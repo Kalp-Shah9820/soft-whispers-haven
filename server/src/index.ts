@@ -41,12 +41,10 @@ function isDevAllowedOrigin(origin: string): boolean {
   return devOriginRegex.test(origin);
 }
 
-// Log WhatsApp status at startup
+// Log WhatsApp status at startup (summary only)
 const whatsappStatus = getWhatsAppStatus();
-if (whatsappStatus.configured) {
-  console.log("📱 " + whatsappStatus.message);
-} else {
-  console.log("📱 WhatsApp: NOT CONFIGURED — " + whatsappStatus.message);
+if (!whatsappStatus.configured) {
+  console.warn("📱 WhatsApp not configured — notifications will be skipped.");
 }
 
 // Middleware
@@ -71,34 +69,35 @@ app.use(
 app.disable("x-powered-by");
 app.use(express.json());
 
-// One-time bootstrap: ensure notification flags are enabled for existing users.
-// This assumes the Prisma schema has been migrated to include these fields.
+// Startup backfill: existing users were created before notification fields existed,
+// so their columns are genuinely NULL in the DB. Prisma's type-safe updateMany
+// cannot filter on NULL for non-nullable fields, so we use raw SQL instead.
+// Safe to run on every startup — only touches rows where the field IS NULL.
 async function backfillUserNotificationFlags() {
   try {
-    const result = await prisma.user.updateMany({
-      data: {
-        notificationsEnabled: true,
-        onboardingCompleted: true,
-      },
-    });
-    console.log(
-      `👤 Notification flags backfill applied to ${result.count} users (notificationsEnabled=true, onboardingCompleted=true).`
-    );
+    // Use a single UPDATE … WHERE notificationsEnabled IS NULL so it's idempotent.
+    // Coalesce each column so already-set values are never overwritten.
+    const result = await prisma.$executeRaw`
+      UPDATE "User"
+      SET
+        "notificationsEnabled"   = COALESCE("notificationsEnabled",   true),
+        "onboardingCompleted"    = COALESCE("onboardingCompleted",    true),
+        "showWater"              = COALESCE("showWater",              true),
+        "showRest"               = COALESCE("showRest",               true),
+        "showSkincare"           = COALESCE("showSkincare",           true),
+        "showPeriod"             = COALESCE("showPeriod",             true),
+        "periodReminderEnabled"  = COALESCE("periodReminderEnabled",  true),
+        "emotionalCheckinEnabled"= COALESCE("emotionalCheckinEnabled",true),
+        "waterReminderFrequency" = COALESCE("waterReminderFrequency", 1)
+      WHERE "notificationsEnabled" IS NULL
+    `;
+    console.log(`✅ Notification defaults backfilled — ${result} user(s) updated`);
   } catch (error: any) {
-    // If the migration has not been run yet and fields don't exist, fail softly.
-    if (error?.code === "P2003" || error?.code === "P2000") {
-      console.warn(
-        "Skipping notification flag backfill because the database schema is not yet migrated for notificationsEnabled/onboardingCompleted."
-      );
-    } else if (error?.message?.includes("Unknown argument `notificationsEnabled`")) {
-      console.warn(
-        "Skipping notification flag backfill because Prisma Client is out of date. Run `npm run db:migrate` and `npm run db:generate`."
-      );
-    } else {
-      console.error("Failed to backfill user notification flags:", error);
-    }
+    // Never crash the server over a backfill
+    console.error("⚠️  Notification defaults backfill skipped:", error?.message ?? error);
   }
 }
+
 
 backfillUserNotificationFlags();
 
@@ -153,5 +152,5 @@ setupScheduledJobs();
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🌸 Backend server running on port ${PORT}`);
+  console.log(`[server] Listening on port ${PORT} (${NODE_ENV})`);
 });

@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import { AuthRequest, requireMainUser } from "../middleware/auth";
-import { sendWhatsAppNotification } from "../services/whatsapp";
-import { getPartnerInfo } from "../utils/notifications";
+import { notifyPartner } from "../services/notifyPartner";
+import { partnerMsg } from "../utils/messages";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -10,32 +10,20 @@ const prisma = new PrismaClient();
 // Get all letters (filtered by role)
 router.get("/", async (req: AuthRequest, res) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.userId! },
-    });
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+    if (!user) return res.status(404).json({ error: "User not found" });
 
     const today = new Date().toISOString().slice(0, 10);
 
     let letters;
     if (user.role === "PARTNER") {
-      const mainUser = await prisma.user.findUnique({
-        where: { id: user.partnerId! },
-      });
-      if (!mainUser) {
-        return res.json({ letters: [] });
-      }
+      const mainUser = await prisma.user.findUnique({ where: { id: user.partnerId! } });
+      if (!mainUser) return res.json({ letters: [] });
       letters = await prisma.letter.findMany({
         where: {
           userId: mainUser.id,
           shared: true,
-          OR: [
-            { sealed: false },
-            { unlockDate: { lte: today } },
-          ],
+          OR: [{ sealed: false }, { unlockDate: { lte: today } }],
         },
         orderBy: { createdAt: "desc" },
       });
@@ -47,8 +35,7 @@ router.get("/", async (req: AuthRequest, res) => {
     }
 
     res.json({ letters });
-  } catch (error: any) {
-    console.error("Get letters error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to get letters" });
   }
 });
@@ -57,10 +44,9 @@ router.get("/", async (req: AuthRequest, res) => {
 router.post("/", requireMainUser, async (req: AuthRequest, res) => {
   try {
     const { content, unlockDate, shared = true, sealed } = req.body;
+    if (!content) return res.status(400).json({ error: "Content is required" });
 
-    if (!content) {
-      return res.status(400).json({ error: "Content is required" });
-    }
+    const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { name: true } });
 
     const letter = await prisma.letter.create({
       data: {
@@ -72,35 +58,12 @@ router.post("/", requireMainUser, async (req: AuthRequest, res) => {
       },
     });
 
-    // Notify partner only (event-based relationship update)
     if (shared) {
-      try {
-        const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { name: true } });
-        const partnerInfo = await getPartnerInfo(prisma, req.userId!);
-        if (partnerInfo) {
-          console.log("Partner found");
-          console.log(`[Partner Notification: Letter] User: ${req.userId!}, Partner Phone: ${partnerInfo.phone}, Partner Name: ${partnerInfo.name}`);
-          console.log(`Sending partner notification: letter`);
-
-          const result = await sendWhatsAppNotification(
-            partnerInfo.phone,
-            `💌 ${user?.name || "Your partner"} shared a new letter with you.`
-          );
-          if (result.success) {
-            console.log("Notification sent successfully");
-          } else {
-            console.error("Failed to notify letter recipient:", result.error, `(${partnerInfo.phone})`);
-          }
-        }
-      } catch (error: any) {
-        console.error("Error sending partner notification (letter):", error.message);
-        // Don't crash if partner is missing
-      }
+      notifyPartner(prisma, req.userId!, partnerMsg("letter", user?.name || ""));
     }
 
     res.status(201).json({ letter });
-  } catch (error: any) {
-    console.error("Create letter error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to create letter" });
   }
 });
@@ -111,13 +74,9 @@ router.patch("/:id", requireMainUser, async (req: AuthRequest, res) => {
     const { id } = req.params;
     const { content, unlockDate, shared, sealed } = req.body;
 
-    const existing = await prisma.letter.findUnique({
-      where: { id },
-    });
-
-    if (!existing || existing.userId !== req.userId) {
+    const existing = await prisma.letter.findUnique({ where: { id } });
+    if (!existing || existing.userId !== req.userId)
       return res.status(403).json({ error: "Access denied" });
-    }
 
     const letter = await prisma.letter.update({
       where: { id },
@@ -130,8 +89,7 @@ router.patch("/:id", requireMainUser, async (req: AuthRequest, res) => {
     });
 
     res.json({ letter });
-  } catch (error: any) {
-    console.error("Update letter error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to update letter" });
   }
 });
@@ -141,21 +99,13 @@ router.delete("/:id", requireMainUser, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
 
-    const existing = await prisma.letter.findUnique({
-      where: { id },
-    });
-
-    if (!existing || existing.userId !== req.userId) {
+    const existing = await prisma.letter.findUnique({ where: { id } });
+    if (!existing || existing.userId !== req.userId)
       return res.status(403).json({ error: "Access denied" });
-    }
 
-    await prisma.letter.delete({
-      where: { id },
-    });
-
+    await prisma.letter.delete({ where: { id } });
     res.json({ success: true });
-  } catch (error: any) {
-    console.error("Delete letter error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to delete letter" });
   }
 });

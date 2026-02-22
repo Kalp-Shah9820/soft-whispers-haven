@@ -81,19 +81,38 @@ model User {
   hideEverything          Boolean     @default(false)
   periodStartDate         String?     // ISO date string
   currentNeed             CurrentNeed @default(GENTLE_REMINDERS)
-  waterReminderFrequency  Int         @default(2) // hours
+  waterReminderFrequency  Int         @default(2) // hours between water reminders
+  dailyMotivationTime     String      @default("09:00") // HH:MM 24h
+  skincareReminderTime    String      @default("08:00") // HH:MM morning; evening = +13h
+  emotionalCheckinTime    String      @default("20:00") // HH:MM 24h
+  periodReminderEnabled   Boolean     @default(false)
+  emotionalCheckinEnabled Boolean     @default(true)
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  dreams       Dream[]
-  thoughts     Thought[]
-  letters      Letter[]
-  moodEntries  MoodEntry[]
+  dreams        Dream[]
+  thoughts      Thought[]
+  letters       Letter[]
+  moodEntries   MoodEntry[]
   selfCareItems SelfCareItem[]
+  notificationLogs NotificationLog[]
   
   @@index([partnerId])
 }
+
+model NotificationLog {
+  id      String   @id @default(cuid())
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // type values: "daily_motivation" | "water" | "skincare_am" | "skincare_pm" | "period" | "emotional_checkin"
+  type    String
+  sentAt  DateTime @default(now())
+
+  @@index([userId, type, sentAt])
+  @@index([userId])
+}
+
 
 model Dream {
   id        String   @id @default(cuid())

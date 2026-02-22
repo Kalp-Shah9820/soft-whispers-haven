@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import { AuthRequest, requireMainUser } from "../middleware/auth";
-import { sendWhatsAppNotification } from "../services/whatsapp";
+import { notifyPartner } from "../services/notifyPartner";
+import { partnerMsg } from "../utils/messages";
 import { getDailyMessage } from "../utils/messages";
-import { getPartnerInfo } from "../utils/notifications";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -11,27 +11,15 @@ const prisma = new PrismaClient();
 // Get mood history (filtered by role)
 router.get("/history", async (req: AuthRequest, res) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.userId! },
-    });
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+    if (!user) return res.status(404).json({ error: "User not found" });
 
     let moodEntries;
     if (user.role === "PARTNER") {
-      const mainUser = await prisma.user.findUnique({
-        where: { id: user.partnerId! },
-      });
-      if (!mainUser) {
-        return res.json({ moods: [] });
-      }
+      const mainUser = await prisma.user.findUnique({ where: { id: user.partnerId! } });
+      if (!mainUser) return res.json({ moods: [] });
       moodEntries = await prisma.moodEntry.findMany({
-        where: {
-          userId: mainUser.id,
-          shared: true,
-        },
+        where: { userId: mainUser.id, shared: true },
         orderBy: { date: "desc" },
       });
     } else {
@@ -42,78 +30,35 @@ router.get("/history", async (req: AuthRequest, res) => {
     }
 
     res.json({ moods: moodEntries });
-  } catch (error: any) {
-    console.error("Get mood history error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to get mood history" });
   }
 });
 
-// Log mood
+// Log mood (upsert — one per day)
 router.post("/log", requireMainUser, async (req: AuthRequest, res) => {
   try {
     const { mood, shared } = req.body;
     const today = new Date().toISOString().slice(0, 10);
+    if (!mood) return res.status(400).json({ error: "Mood is required" });
 
-    if (!mood) {
-      return res.status(400).json({ error: "Mood is required" });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: req.userId! },
-    });
-
+    const user = await prisma.user.findUnique({ where: { id: req.userId! } });
     const message = getDailyMessage();
+    const isShared = shared !== false && !!user?.globalSharing;
 
-    // Upsert mood entry (one per day)
     const moodEntry = await prisma.moodEntry.upsert({
-      where: {
-        userId_date: {
-          userId: req.userId!,
-          date: today,
-        },
-      },
-      update: {
-        mood,
-        shared: shared !== false && user?.globalSharing,
-        message,
-      },
-      create: {
-        userId: req.userId!,
-        mood,
-        date: today,
-        shared: shared !== false && user?.globalSharing,
-        message,
-      },
+      where: { userId_date: { userId: req.userId!, date: today } },
+      update: { mood, shared: isShared, message },
+      create: { userId: req.userId!, mood, date: today, shared: isShared, message },
     });
 
-    // Notify partner only (event-based relationship update)
-    if (moodEntry.shared && user) {
-      try {
-        const partnerInfo = await getPartnerInfo(prisma, req.userId!);
-        if (partnerInfo) {
-          console.log("Partner found");
-          console.log(`[Partner Notification: Mood] User: ${req.userId!}, Partner Phone: ${partnerInfo.phone}, Partner Name: ${partnerInfo.name}`);
-          console.log(`Sending partner notification: mood`);
-
-          const result = await sendWhatsAppNotification(
-            partnerInfo.phone,
-            `😊 ${user.name || "Your partner"} shared how they are feeling today.`
-          );
-          if (result.success) {
-            console.log("Notification sent successfully");
-          } else {
-            console.error("Failed to notify mood recipient:", result.error, `(${partnerInfo.phone})`);
-          }
-        }
-      } catch (error: any) {
-        console.error("Error sending partner notification (mood):", error.message);
-        // Don't crash if partner is missing
-      }
+    // Notify partner when mood is shared
+    if (isShared && user) {
+      notifyPartner(prisma, req.userId!, partnerMsg("mood", user.name || ""));
     }
 
     res.json({ mood: moodEntry });
-  } catch (error: any) {
-    console.error("Log mood error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to log mood" });
   }
 });
@@ -121,29 +66,18 @@ router.post("/log", requireMainUser, async (req: AuthRequest, res) => {
 // Get today's mood
 router.get("/today", async (req: AuthRequest, res) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.userId! },
-    });
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+    if (!user) return res.status(404).json({ error: "User not found" });
 
     const today = new Date().toISOString().slice(0, 10);
     const userId = user.role === "PARTNER" ? user.partnerId! : req.userId!;
 
     const moodEntry = await prisma.moodEntry.findUnique({
-      where: {
-        userId_date: {
-          userId,
-          date: today,
-        },
-      },
+      where: { userId_date: { userId, date: today } },
     });
 
     res.json({ mood: moodEntry });
-  } catch (error: any) {
-    console.error("Get today mood error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to get today's mood" });
   }
 });

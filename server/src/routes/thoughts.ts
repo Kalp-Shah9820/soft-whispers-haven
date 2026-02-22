@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import { AuthRequest, requireMainUser } from "../middleware/auth";
-import { sendWhatsAppNotification } from "../services/whatsapp";
-import { getPartnerInfo } from "../utils/notifications";
+import { notifyPartner } from "../services/notifyPartner";
+import { partnerMsg } from "../utils/messages";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -10,27 +10,15 @@ const prisma = new PrismaClient();
 // Get all thoughts (filtered by role)
 router.get("/", async (req: AuthRequest, res) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.userId! },
-    });
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+    if (!user) return res.status(404).json({ error: "User not found" });
 
     let thoughts;
     if (user.role === "PARTNER") {
-      const mainUser = await prisma.user.findUnique({
-        where: { id: user.partnerId! },
-      });
-      if (!mainUser) {
-        return res.json({ thoughts: [] });
-      }
+      const mainUser = await prisma.user.findUnique({ where: { id: user.partnerId! } });
+      if (!mainUser) return res.json({ thoughts: [] });
       thoughts = await prisma.thought.findMany({
-        where: {
-          userId: mainUser.id,
-          shared: true,
-        },
+        where: { userId: mainUser.id, shared: true },
         orderBy: { createdAt: "desc" },
       });
     } else {
@@ -41,8 +29,7 @@ router.get("/", async (req: AuthRequest, res) => {
     }
 
     res.json({ thoughts });
-  } catch (error: any) {
-    console.error("Get thoughts error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to get thoughts" });
   }
 });
@@ -51,10 +38,9 @@ router.get("/", async (req: AuthRequest, res) => {
 router.post("/", requireMainUser, async (req: AuthRequest, res) => {
   try {
     const { content, mood, shared = true } = req.body;
+    if (!content) return res.status(400).json({ error: "Content is required" });
 
-    if (!content) {
-      return res.status(400).json({ error: "Content is required" });
-    }
+    const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { name: true } });
 
     const thought = await prisma.thought.create({
       data: {
@@ -65,35 +51,12 @@ router.post("/", requireMainUser, async (req: AuthRequest, res) => {
       },
     });
 
-    // Notify partner only (event-based relationship update)
     if (shared) {
-      try {
-        const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { name: true } });
-        const partnerInfo = await getPartnerInfo(prisma, req.userId!);
-        if (partnerInfo) {
-          console.log("Partner found");
-          console.log(`[Partner Notification: Thought] User: ${req.userId!}, Partner Phone: ${partnerInfo.phone}, Partner Name: ${partnerInfo.name}`);
-          console.log(`Sending partner notification: thought`);
-
-          const result = await sendWhatsAppNotification(
-            partnerInfo.phone,
-            `💭 ${user?.name || "Your partner"} shared a new thought with you.`
-          );
-          if (result.success) {
-            console.log("Notification sent successfully");
-          } else {
-            console.error("Failed to notify thought recipient:", result.error, `(${partnerInfo.phone})`);
-          }
-        }
-      } catch (error: any) {
-        console.error("Error sending partner notification (thought):", error.message);
-        // Don't crash if partner is missing
-      }
+      notifyPartner(prisma, req.userId!, partnerMsg("thought", user?.name || ""));
     }
 
     res.status(201).json({ thought });
-  } catch (error: any) {
-    console.error("Create thought error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to create thought" });
   }
 });
@@ -104,13 +67,9 @@ router.patch("/:id", requireMainUser, async (req: AuthRequest, res) => {
     const { id } = req.params;
     const { content, mood, shared } = req.body;
 
-    const existing = await prisma.thought.findUnique({
-      where: { id },
-    });
-
-    if (!existing || existing.userId !== req.userId) {
+    const existing = await prisma.thought.findUnique({ where: { id } });
+    if (!existing || existing.userId !== req.userId)
       return res.status(403).json({ error: "Access denied" });
-    }
 
     const thought = await prisma.thought.update({
       where: { id },
@@ -122,8 +81,7 @@ router.patch("/:id", requireMainUser, async (req: AuthRequest, res) => {
     });
 
     res.json({ thought });
-  } catch (error: any) {
-    console.error("Update thought error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to update thought" });
   }
 });
@@ -133,21 +91,13 @@ router.delete("/:id", requireMainUser, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
 
-    const existing = await prisma.thought.findUnique({
-      where: { id },
-    });
-
-    if (!existing || existing.userId !== req.userId) {
+    const existing = await prisma.thought.findUnique({ where: { id } });
+    if (!existing || existing.userId !== req.userId)
       return res.status(403).json({ error: "Access denied" });
-    }
 
-    await prisma.thought.delete({
-      where: { id },
-    });
-
+    await prisma.thought.delete({ where: { id } });
     res.json({ success: true });
-  } catch (error: any) {
-    console.error("Delete thought error:", error);
+  } catch {
     res.status(500).json({ error: "Failed to delete thought" });
   }
 });

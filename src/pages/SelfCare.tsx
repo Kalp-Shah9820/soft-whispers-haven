@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
-import { useSelfCareAPI, useSettingsAPI } from "@/lib/store-api";
 import { selfCareAPI, mapSelfCareCategoryToDB } from "@/lib/api";
 import { type SelfCareItem } from "@/lib/store";
+import { useSettingsAPI } from "@/lib/store-api";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/sonner";
 
+// ── Category definitions ─────────────────────────────────────────────────
 const CATEGORIES = {
   water: {
     emoji: "💧",
@@ -41,62 +42,116 @@ const CATEGORIES = {
   },
 };
 
-// Generate a simple ID for new self-care items
-const genId = () => Math.random().toString(36).slice(2, 10);
+const SKINCARE_MORNING = ["Morning cleanse", "Morning moisturize", "Sunscreen"];
+const SKINCARE_EVENING = ["Evening cleanse", "Night moisturize"];
+const SKINCARE_BATH = ["Bath check-up", "After bath care"];
+
+const TODAY = new Date().toISOString().slice(0, 10);
+
+function backendToItem(i: any): SelfCareItem {
+  return {
+    id: i.id,
+    label: i.label,
+    category: (i.category as string).toLowerCase() as SelfCareItem["category"],
+    checked: i.checked,
+    date: i.date,
+  };
+}
 
 export default function SelfCare() {
-  const [items, setItems] = useSelfCareAPI();
+  const [items, setItems] = useState<SelfCareItem[]>([]);
   const [settings] = useSettingsAPI();
+  // initialized: true once we've heard back from the backend load (success or failure)
+  const [initialized, setInitialized] = useState(false);
+  // creating: true while the initialization POST is in-flight (prevents double-fire)
+  const [creating, setCreating] = useState(false);
 
-  // Initialize items for today if empty (after API load)
+  // ── Step 1: Load today's items from backend ────────────────────────────
   useEffect(() => {
-    if (items.length === 0) {
-      const today = new Date().toISOString().slice(0, 10);
-      const initial: SelfCareItem[] = [];
-      for (const [cat, config] of Object.entries(CATEGORIES)) {
-        if (!settings[config.settingsKey]) continue;
-        for (const label of config.items) {
-          initial.push({ id: genId(), label, category: cat as any, checked: false, date: today });
+    selfCareAPI
+      .getByDate(TODAY)
+      .then(({ items: saved }) => {
+        if (saved?.length > 0) {
+          setItems(saved.map(backendToItem));
         }
-      }
-      if (initial.length > 0) {
-        setItems(initial);
-        // Persist to API
-        selfCareAPI
-          .create(
-            initial.map((i) => ({
-              label: i.label,
-              category: mapSelfCareCategoryToDB(i.category),
-              checked: false,
-              date: i.date,
-            }))
-          )
-          .then(({ items: saved }) => {
-            // Sync real IDs from backend
-            if (saved && saved.length === initial.length) {
-              setItems(
-                saved.map((s: any, idx: number) => ({
-                  ...initial[idx],
-                  id: s.id,
-                }))
-              );
-            }
-          })
-          .catch((err) => console.error("Failed to init self-care items:", err));
+      })
+      .catch(() => { /* will initialize below */ })
+      .finally(() => setInitialized(true));
+  }, []);
+
+  // ── Step 2: If backend returned nothing, create defaults ───────────────
+  // Wait for BOTH the load AND real settings before deciding what to create
+  useEffect(() => {
+    if (!initialized) return;          // still loading from backend
+    if (items.length > 0) return;      // already have items — nothing to create
+    if (creating) return;              // creation already in-flight
+    // settings not yet loaded from API → wait
+    if (!settings.identity) return;    // identity only present after real settings arrive
+
+    setCreating(true);
+
+    const initial: SelfCareItem[] = [];
+    for (const [cat, config] of Object.entries(CATEGORIES)) {
+      if (!settings[config.settingsKey]) continue;
+      for (const label of config.items) {
+        initial.push({
+          id: `tmp-${Math.random().toString(36).slice(2)}`,
+          label,
+          category: cat as SelfCareItem["category"],
+          checked: false,
+          date: TODAY,
+        });
       }
     }
-  }, [items.length, settings]);
 
+    if (initial.length === 0) {
+      setCreating(false);
+      return;
+    }
+
+    // Optimistic: show items immediately with temp IDs
+    setItems(initial);
+
+    selfCareAPI
+      .create(initial.map((i) => ({
+        label: i.label,
+        category: mapSelfCareCategoryToDB(i.category),
+        checked: false,
+        date: TODAY,
+      })))
+      .then(({ items: saved }) => {
+        if (saved?.length > 0) {
+          // Replace temp IDs with real backend IDs, matched by label
+          setItems(
+            initial.map((local) => {
+              const match = saved.find((s: any) => s.label === local.label);
+              return { ...local, id: match ? match.id : local.id };
+            })
+          );
+        }
+      })
+      .catch(() => { /* optimistic items stay */ })
+      .finally(() => setCreating(false));
+  }, [initialized, items.length, creating, settings]);
+
+  // ── Toggle: PATCH only, never replaces other items ────────────────────
   const toggle = async (id: string) => {
     const item = items.find((i) => i.id === id);
     if (!item) return;
+
+    // Guard against toggling temp-ID items (backend not synced yet)
+    if (id.startsWith("tmp-")) {
+      toast.error("Still saving, please wait a moment 💛");
+      return;
+    }
+
     const newChecked = !item.checked;
-    // Optimistic update
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, checked: newChecked } : i)));
+
     try {
       await selfCareAPI.update(id, { checked: newChecked });
-    } catch (error) {
-      // Revert
+      // Partner notification fires server-side when checked === true
+    } catch {
       setItems((prev) => prev.map((i) => (i.id === id ? { ...i, checked: !newChecked } : i)));
       toast.error("Couldn't update 💛");
     }
@@ -136,37 +191,27 @@ export default function SelfCare() {
                   </span>
                 )}
               </div>
-              {cat === "skincare" && (
+
+              {categoryItems.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic pl-1">Loading… 🌿</p>
+              ) : cat === "skincare" ? (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground font-medium">☀️ Morning</p>
-                  {categoryItems.filter((i) => ["Morning cleanse", "Morning moisturize", "Sunscreen"].includes(i.label)).map((item) => (
-                    <label key={item.id} className="flex items-center gap-3 cursor-pointer py-1.5 group">
-                      <Checkbox checked={item.checked} onCheckedChange={() => toggle(item.id)} className="rounded-full border-primary/40 data-[state=checked]:bg-primary" />
-                      <span className={`text-sm transition-colors ${item.checked ? "text-muted-foreground line-through" : "text-foreground"}`}>{item.label}</span>
-                    </label>
+                  {categoryItems.filter((i) => SKINCARE_MORNING.includes(i.label)).map((item) => (
+                    <ItemRow key={item.id} item={item} toggle={toggle} />
                   ))}
                   <p className="text-xs text-muted-foreground font-medium pt-2">🌙 Evening</p>
-                  {categoryItems.filter((i) => ["Evening cleanse", "Night moisturize"].includes(i.label)).map((item) => (
-                    <label key={item.id} className="flex items-center gap-3 cursor-pointer py-1.5 group">
-                      <Checkbox checked={item.checked} onCheckedChange={() => toggle(item.id)} className="rounded-full border-primary/40 data-[state=checked]:bg-primary" />
-                      <span className={`text-sm transition-colors ${item.checked ? "text-muted-foreground line-through" : "text-foreground"}`}>{item.label}</span>
-                    </label>
+                  {categoryItems.filter((i) => SKINCARE_EVENING.includes(i.label)).map((item) => (
+                    <ItemRow key={item.id} item={item} toggle={toggle} />
                   ))}
                   <p className="text-xs text-muted-foreground font-medium pt-2">🛁 Bath</p>
-                  {categoryItems.filter((i) => ["Bath check-up", "After bath care"].includes(i.label)).map((item) => (
-                    <label key={item.id} className="flex items-center gap-3 cursor-pointer py-1.5 group">
-                      <Checkbox checked={item.checked} onCheckedChange={() => toggle(item.id)} className="rounded-full border-primary/40 data-[state=checked]:bg-primary" />
-                      <span className={`text-sm transition-colors ${item.checked ? "text-muted-foreground line-through" : "text-foreground"}`}>{item.label}</span>
-                    </label>
+                  {categoryItems.filter((i) => SKINCARE_BATH.includes(i.label)).map((item) => (
+                    <ItemRow key={item.id} item={item} toggle={toggle} />
                   ))}
                 </div>
+              ) : (
+                categoryItems.map((item) => <ItemRow key={item.id} item={item} toggle={toggle} />)
               )}
-              {cat !== "skincare" && categoryItems.map((item) => (
-                <label key={item.id} className="flex items-center gap-3 cursor-pointer py-1.5 group">
-                  <Checkbox checked={item.checked} onCheckedChange={() => toggle(item.id)} className="rounded-full border-primary/40 data-[state=checked]:bg-primary" />
-                  <span className={`text-sm transition-colors ${item.checked ? "text-muted-foreground line-through" : "text-foreground"}`}>{item.label}</span>
-                </label>
-              ))}
             </motion.div>
           );
         })
@@ -176,5 +221,20 @@ export default function SelfCare() {
         Remember: doing even one little thing is enough 💛
       </p>
     </div>
+  );
+}
+
+function ItemRow({ item, toggle }: { item: SelfCareItem; toggle: (id: string) => void }) {
+  return (
+    <label className="flex items-center gap-3 cursor-pointer py-1.5 group">
+      <Checkbox
+        checked={item.checked}
+        onCheckedChange={() => toggle(item.id)}
+        className="rounded-full border-primary/40 data-[state=checked]:bg-primary"
+      />
+      <span className={`text-sm transition-colors ${item.checked ? "text-muted-foreground line-through" : "text-foreground"}`}>
+        {item.label}
+      </span>
+    </label>
   );
 }

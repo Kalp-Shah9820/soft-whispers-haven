@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { type CurrentNeed } from "@/lib/store";
 import { useSettingsAPI, useRoleAPI } from "@/lib/store-api";
 import { Switch } from "@/components/ui/switch";
-import { Shield, LogOut } from "lucide-react";
+import { Shield, LogOut, Check, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useHideMode } from "@/lib/hideMode";
 import { toast } from "@/components/ui/sonner";
@@ -24,23 +24,69 @@ export default function SettingsPage() {
   const navigate = useNavigate();
   const { hideMode, enterHideMode, exitHideMode } = useHideMode();
   const [activating, setActivating] = useState(false);
+  const [savingName, setSavingName] = useState(false);
+  const [nameSaved, setNameSaved] = useState(false);
 
   const update = (patch: Partial<typeof settings>) => setSettings((prev) => ({ ...prev, ...patch }));
   const updateIdentity = (patch: Partial<typeof settings.identity>) =>
     update({ identity: { ...settings.identity, ...patch } });
 
   const handleActivateNotifications = async () => {
+    const { name, phone, partnerName, partnerPhone } = settings.identity;
+
+    if (!phone?.trim()) {
+      toast.error("Please enter your phone number first 💛");
+      return;
+    }
+
     setActivating(true);
     try {
-      await settingsAPI.activateNotifications({
-        userPhone: settings.identity.phone || "",
-        partnerPhone: settings.identity.partnerPhone || "",
+      // Step 1: save name + partner name + phones to DB so notification messages use real names
+      await settingsAPI.update({
+        identity: {
+          name: name || "",
+          phone: phone || "",
+          partnerName: partnerName || "",
+          partnerPhone: partnerPhone || "",
+        },
       });
-      toast.success("Notifications activated 💚");
+
+      // Step 2: flip notificationsEnabled flag and link partner
+      await settingsAPI.activateNotifications({
+        userPhone: phone || "",
+        partnerPhone: partnerPhone || "",
+        userName: name || "",
+        partnerName: partnerName || "",
+      });
+
+      toast.success(`Notifications activated for ${name || "you"} 💚`);
     } catch (e: any) {
       toast.error(e?.message || "Failed to activate notifications");
     } finally {
       setActivating(false);
+    }
+  };
+
+  const handleSaveName = async () => {
+    const { name, partnerName } = settings.identity;
+    setSavingName(true);
+    setNameSaved(false);
+    try {
+      await settingsAPI.update({
+        identity: {
+          name: name || "",
+          phone: settings.identity.phone || "",
+          partnerName: partnerName || "",
+          partnerPhone: settings.identity.partnerPhone || "",
+        },
+      });
+      setNameSaved(true);
+      toast.success(`Saved! I'll call you "${name || "lovely"}" in all notifications 💕`);
+      setTimeout(() => setNameSaved(false), 3000);
+    } catch (e: any) {
+      toast.error(e?.message || "Couldn't save name 🌙");
+    } finally {
+      setSavingName(false);
     }
   };
 
@@ -76,6 +122,20 @@ export default function SettingsPage() {
             />
           </div>
         </div>
+        <button
+          type="button"
+          onClick={handleSaveName}
+          disabled={savingName}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary/20 text-primary font-medium text-sm hover:bg-primary/30 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+        >
+          {savingName ? (
+            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…</>
+          ) : nameSaved ? (
+            <><Check className="h-3.5 w-3.5" /> Saved 💕</>
+          ) : (
+            "Save name for notifications 💌"
+          )}
+        </button>
       </div>
 
       {/* Phone numbers for WhatsApp notifications */}
