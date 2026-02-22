@@ -1,17 +1,21 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useThoughts, type Mood } from "@/lib/store";
+import { useThoughtsAPI } from "@/lib/store-api";
+import { thoughtsAPI } from "@/lib/api";
+import { type Mood } from "@/lib/store";
 import { Link } from "react-router-dom";
 import { Search, Trash2, Edit3, X, Check } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/sonner";
 
 export default function Thoughts() {
-  const [thoughts, setThoughts] = useThoughts();
+  const [thoughts, setThoughts] = useThoughtsAPI();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "shared" | "private">("all");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
+  const [loadingId, setLoadingId] = useState<string | null>(null);
 
   const filtered = thoughts
     .filter((t) => {
@@ -26,19 +30,52 @@ export default function Thoughts() {
     setEditContent(content);
   };
 
-  const saveEdit = (id: string) => {
+  const saveEdit = async (id: string) => {
+    const now = new Date().toISOString();
+    // Optimistic update
     setThoughts((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, content: editContent, updatedAt: new Date().toISOString() } : t))
+      prev.map((t) => (t.id === id ? { ...t, content: editContent, updatedAt: now } : t))
     );
     setEditingId(null);
+    try {
+      await thoughtsAPI.update(id, { content: editContent });
+    } catch (error) {
+      console.error("Failed to save thought:", error);
+      toast.error("Couldn't save changes 💭");
+    }
   };
 
-  const toggleShare = (id: string) => {
-    setThoughts((prev) => prev.map((t) => (t.id === id ? { ...t, shared: !t.shared } : t)));
+  const toggleShare = async (id: string) => {
+    const thought = thoughts.find((t) => t.id === id);
+    if (!thought) return;
+    const newShared = !thought.shared;
+    // Optimistic update
+    setThoughts((prev) => prev.map((t) => (t.id === id ? { ...t, shared: newShared } : t)));
+    try {
+      await thoughtsAPI.update(id, { shared: newShared });
+    } catch (error) {
+      console.error("Failed to update sharing:", error);
+      // Revert
+      setThoughts((prev) => prev.map((t) => (t.id === id ? { ...t, shared: !newShared } : t)));
+      toast.error("Couldn't update sharing 💭");
+    }
   };
 
-  const deleteThought = (id: string) => {
+  const deleteThought = async (id: string) => {
+    setLoadingId(id);
+    // Optimistic remove
+    const removed = thoughts.find((t) => t.id === id);
     setThoughts((prev) => prev.filter((t) => t.id !== id));
+    try {
+      await thoughtsAPI.delete(id);
+    } catch (error) {
+      console.error("Failed to delete thought:", error);
+      // Revert
+      if (removed) setThoughts((prev) => [...prev, removed]);
+      toast.error("Couldn't delete this thought 💭");
+    } finally {
+      setLoadingId(null);
+    }
   };
 
   return (
@@ -65,9 +102,8 @@ export default function Thoughts() {
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-full text-xs font-medium transition-colors ${
-                filter === f ? "bg-primary/20 text-primary" : "bg-secondary/40 text-muted-foreground hover:bg-secondary/60"
-              }`}
+              className={`px-4 py-2 rounded-full text-xs font-medium transition-colors ${filter === f ? "bg-primary/20 text-primary" : "bg-secondary/40 text-muted-foreground hover:bg-secondary/60"
+                }`}
             >
               {f === "all" ? "All" : f === "shared" ? "💕 Shared" : "🔒 Private"}
             </button>
@@ -96,7 +132,7 @@ export default function Thoughts() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.03 }}
-              className="bg-card rounded-2xl p-5 space-y-3"
+              className={`bg-card rounded-2xl p-5 space-y-3 ${loadingId === thought.id ? "opacity-50" : ""}`}
             >
               {editingId === thought.id ? (
                 <div className="space-y-3">

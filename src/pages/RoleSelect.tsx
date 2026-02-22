@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
-import { useRole, useSettings, getPersonalizedGreeting } from "@/lib/store";
+import { getPersonalizedGreeting } from "@/lib/store";
+import { useRoleAPI, useSettingsAPI } from "@/lib/store-api";
 import { Heart, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export default function RoleSelect() {
-  const [, setRole] = useRole();
-  const [settings] = useSettings();
+  const [, setRole] = useRoleAPI();
+  const [settings] = useSettingsAPI();
   const navigate = useNavigate();
 
   return (

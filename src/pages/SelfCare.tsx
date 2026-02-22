@@ -1,7 +1,10 @@
 import { motion } from "framer-motion";
-import { useSelfCare, useSettings, genId, type SelfCareItem } from "@/lib/store";
+import { useSelfCareAPI, useSettingsAPI } from "@/lib/store-api";
+import { selfCareAPI, mapSelfCareCategoryToDB } from "@/lib/api";
+import { type SelfCareItem } from "@/lib/store";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useEffect } from "react";
+import { toast } from "@/components/ui/sonner";
 
 const CATEGORIES = {
   water: {
@@ -38,11 +41,14 @@ const CATEGORIES = {
   },
 };
 
-export default function SelfCare() {
-  const [items, setItems] = useSelfCare();
-  const [settings] = useSettings();
+// Generate a simple ID for new self-care items
+const genId = () => Math.random().toString(36).slice(2, 10);
 
-  // Initialize items for today if empty
+export default function SelfCare() {
+  const [items, setItems] = useSelfCareAPI();
+  const [settings] = useSettingsAPI();
+
+  // Initialize items for today if empty (after API load)
   useEffect(() => {
     if (items.length === 0) {
       const today = new Date().toISOString().slice(0, 10);
@@ -53,17 +59,50 @@ export default function SelfCare() {
           initial.push({ id: genId(), label, category: cat as any, checked: false, date: today });
         }
       }
-      setItems(initial);
+      if (initial.length > 0) {
+        setItems(initial);
+        // Persist to API
+        selfCareAPI
+          .create(
+            initial.map((i) => ({
+              label: i.label,
+              category: mapSelfCareCategoryToDB(i.category),
+              checked: false,
+              date: i.date,
+            }))
+          )
+          .then(({ items: saved }) => {
+            // Sync real IDs from backend
+            if (saved && saved.length === initial.length) {
+              setItems(
+                saved.map((s: any, idx: number) => ({
+                  ...initial[idx],
+                  id: s.id,
+                }))
+              );
+            }
+          })
+          .catch((err) => console.error("Failed to init self-care items:", err));
+      }
     }
-  }, []);
+  }, [items.length, settings]);
 
-  const toggle = (id: string) => {
-    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item)));
+  const toggle = async (id: string) => {
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    const newChecked = !item.checked;
+    // Optimistic update
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, checked: newChecked } : i)));
+    try {
+      await selfCareAPI.update(id, { checked: newChecked });
+    } catch (error) {
+      // Revert
+      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, checked: !newChecked } : i)));
+      toast.error("Couldn't update 💛");
+    }
   };
 
   const visibleCategories = Object.entries(CATEGORIES).filter(([, c]) => settings[c.settingsKey]);
-
-  // Water reminder info
   const waterFreq = settings.waterReminderFrequency || 2;
 
   return (

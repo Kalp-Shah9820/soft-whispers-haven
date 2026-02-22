@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { authAPI, clearAuthToken } from "@/lib/api";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 
 export default function LoginPage() {
   const navigate = useNavigate();

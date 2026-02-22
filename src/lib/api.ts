@@ -1,6 +1,12 @@
 // API client for backend communication
 
+// Ensure API base URL is always http://localhost:3001/api (backend server)
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+
+// Validate API base URL at module load
+if (!API_BASE_URL.startsWith("http://localhost:3001/api") && !API_BASE_URL.includes("://")) {
+  console.warn(`⚠️ API_BASE_URL may be misconfigured: ${API_BASE_URL}. Expected: http://localhost:3001/api`);
+}
 
 // Get auth token from localStorage
 function getToken(): string | null {
@@ -28,21 +34,40 @@ async function apiRequest<T>(
     ...options.headers,
   };
 
+  // Always include JWT token if available (required for authenticated endpoints)
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
+  } else {
+    console.warn(`[API Request] No auth token found in localStorage for ${endpoint}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  // Ensure endpoint starts with / to avoid double slashes
+  const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  const fullUrl = `${API_BASE_URL}${cleanEndpoint}`;
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(error.error || `HTTP ${response.status}`);
+  console.log(`[API Request] ${options.method || "GET"} ${fullUrl}${token ? " (authenticated)" : " (no token)"}`);
+
+  try {
+    const response = await fetch(fullUrl, {
+      ...options,
+      headers,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Request failed" }));
+      console.error(`[API Error] ${options.method || "GET"} ${fullUrl}: ${response.status} - ${error.error || "Unknown error"}`);
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error: any) {
+    // Network errors (CORS, connection refused, etc.)
+    if (error.name === "TypeError" && error.message.includes("fetch")) {
+      console.error(`[API Network Error] Failed to reach ${fullUrl}. Check CORS and backend server.`);
+      throw new Error(`Failed to connect to backend. Is the server running on ${API_BASE_URL}?`);
+    }
+    throw error;
   }
-
-  return response.json();
 }
 
 // Auth API
@@ -111,6 +136,8 @@ export const dreamsAPI = {
     });
   },
   delete: async (id: string) => {
+    console.log(`[dreamsAPI.delete] Called with id: "${id}"`);
+    console.log(`[dreamsAPI.delete] Full URL will be: ${API_BASE_URL}/dreams/${id}`);
     return apiRequest<{ success: boolean }>(`/dreams/${id}`, {
       method: "DELETE",
     });

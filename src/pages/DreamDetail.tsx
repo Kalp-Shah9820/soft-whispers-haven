@@ -1,22 +1,28 @@
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { useDreams, genId, TARGET_STATE_LABELS, type TargetState, type Mood } from "@/lib/store";
+import { useDreamsAPI } from "@/lib/store-api";
+import { dreamsAPI, mapMoodToDB, mapTargetStateToDB } from "@/lib/api";
+import { TARGET_STATE_LABELS, type TargetState, type Mood } from "@/lib/store";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
-import { dreamsAPI } from "@/lib/api";
+import { toast } from "@/components/ui/sonner";
 
 const MOODS: Mood[] = ["😊", "😌", "🌸", "💭", "🌙", "✨", "💪", "🥺", "😴", "🌈"];
 const STATES: TargetState[] = ["starting", "in-progress", "feels-good", "resting"];
 
+// Generate a random ID for optimistic UI (will be replaced by real ID after API response)
+const genTempId = () => `temp-${Math.random().toString(36).slice(2, 10)}`;
+
 export default function DreamDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [dreams, setDreams] = useDreams();
+  const [dreams, setDreams] = useDreamsAPI();
   const dream = dreams.find((d) => d.id === id);
   const [newTarget, setNewTarget] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   if (!dream) {
     return (
@@ -27,13 +33,68 @@ export default function DreamDetail() {
     );
   }
 
-  const update = (patch: Partial<typeof dream>) => {
-    setDreams((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch, updatedAt: new Date().toISOString() } : d)));
-  };
+  // Optimistically update local state and debounce the API call
+  const update = useCallback(
+    (patch: Partial<typeof dream>) => {
+      const now = new Date().toISOString();
+      setDreams((prev) =>
+        prev.map((d) => (d.id === id ? { ...d, ...patch, updatedAt: now } : d))
+      );
+
+      // Debounce API save
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(async () => {
+        try {
+          const apiPatch: Record<string, any> = {};
+          if ("title" in patch) apiPatch.title = patch.title;
+          if ("content" in patch) apiPatch.content = patch.content;
+          if ("mood" in patch) apiPatch.mood = mapMoodToDB(patch.mood as string);
+          if ("shared" in patch) apiPatch.shared = patch.shared;
+          if ("targets" in patch) {
+            apiPatch.targets = (patch.targets || []).map((t) => ({
+              id: t.id.startsWith("temp-") ? undefined : t.id,
+              text: t.text,
+              state: mapTargetStateToDB(t.state),
+              shared: t.shared,
+            }));
+          }
+          const { dream: updated } = await dreamsAPI.update(id!, apiPatch);
+          // Sync with real IDs from backend (especially for new targets)
+          if (updated && updated.targets) {
+            setDreams((prev) =>
+              prev.map((d) =>
+                d.id === id
+                  ? {
+                    ...d,
+                    targets: updated.targets.map((t: any) => ({
+                      id: t.id,
+                      dreamId: t.dreamId,
+                      text: t.text,
+                      state: t.state,
+                      shared: t.shared,
+                    })),
+                  }
+                  : d
+              )
+            );
+          }
+        } catch (error) {
+          console.error("Failed to save dream:", error);
+          toast.error("Couldn't save changes 🌙");
+        }
+      }, 600);
+    },
+    [id, setDreams]
+  );
 
   const addTarget = () => {
     if (!newTarget.trim()) return;
-    update({ targets: [...dream.targets, { id: genId(), dreamId: dream.id, text: newTarget, state: "starting", shared: true }] });
+    update({
+      targets: [
+        ...dream.targets,
+        { id: genTempId(), dreamId: dream.id, text: newTarget, state: "starting", shared: true },
+      ],
+    });
     setNewTarget("");
   };
 
@@ -46,16 +107,18 @@ export default function DreamDetail() {
   };
 
   const deleteDream = async () => {
-    if (!id) return;
-    
+    if (!id || deleting) return;
+    setDeleting(true);
     try {
       await dreamsAPI.delete(id);
       setDreams((prev) => prev.filter((d) => d.id !== id));
-      toast.success("Dream gently released 🌿");
+      toast.success("Dream released 🌙");
       navigate("/dreams");
     } catch (error: any) {
-      console.error("Failed to delete dream:", error);
+      console.error(`Failed to delete dream ${id}:`, error);
       toast.error(error?.message || "Failed to delete dream");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -122,9 +185,8 @@ export default function DreamDetail() {
                     <button
                       key={s}
                       onClick={() => updateTarget(target.id, { state: s })}
-                      className={`text-xs px-3 py-1.5 rounded-full transition-colors ${
-                        target.state === s ? "bg-primary/20 text-primary font-medium" : "bg-secondary/40 text-muted-foreground hover:bg-secondary/60"
-                      }`}
+                      className={`text-xs px-3 py-1.5 rounded-full transition-colors ${target.state === s ? "bg-primary/20 text-primary font-medium" : "bg-secondary/40 text-muted-foreground hover:bg-secondary/60"
+                        }`}
                     >
                       {si.emoji} {si.label}
                     </button>
@@ -157,8 +219,12 @@ export default function DreamDetail() {
       </div>
 
       {/* Delete */}
-      <button onClick={deleteDream} className="text-xs text-muted-foreground hover:text-destructive transition-colors mt-8">
-        Gently let go of this dream
+      <button
+        onClick={deleteDream}
+        disabled={deleting}
+        className="text-xs text-muted-foreground hover:text-destructive transition-colors mt-8 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {deleting ? "Letting go…" : "Gently let go of this dream"}
       </button>
     </div>
   );

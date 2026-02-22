@@ -1,22 +1,25 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { useDreams, useThoughts, genId, type Mood, type WritingMode } from "@/lib/store";
+import { dreamsAPI, thoughtsAPI, mapMoodToDB } from "@/lib/api";
+import { type Mood, type WritingMode } from "@/lib/store";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/sonner";
+import { useNavigate } from "react-router-dom";
 
 const MOODS: Mood[] = ["😊", "😌", "🌸", "💭", "🌙", "✨", "💪", "🥺", "😴", "🌈"];
 
 export default function Write() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<WritingMode>("dream");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [mood, setMood] = useState<Mood>("🌸");
   const [shared, setShared] = useState(true);
-  const [dreams, setDreams] = useDreams();
-  const [thoughts, setThoughts] = useThoughts();
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // Auto-save draft to localStorage
+  // Auto-save draft to localStorage (ephemeral scratch space — not database data)
   useEffect(() => {
     const key = `dc-draft-${mode}`;
     const timeout = setTimeout(() => {
@@ -38,35 +41,39 @@ export default function Write() {
     }
   }, [mode]);
 
-  const handleSave = () => {
-    if (!content.trim()) return;
-    const now = new Date().toISOString();
-    if (mode === "dream") {
-      setDreams((prev) => [
-        ...prev,
-        {
-          id: genId(),
+  const handleSave = async () => {
+    if (!content.trim() || saving) return;
+    setSaving(true);
+    try {
+      if (mode === "dream") {
+        await dreamsAPI.create({
           title: title || "Untitled Dream",
           content,
-          mood,
+          mood: mapMoodToDB(mood),
           shared,
-          createdAt: now,
-          updatedAt: now,
-          targets: [],
-        },
-      ]);
-    } else {
-      setThoughts((prev) => [
-        ...prev,
-        { id: genId(), content, mood, shared, createdAt: now, updatedAt: now },
-      ]);
+        });
+        toast.success("Dream saved 🌙");
+        navigate("/dreams");
+      } else {
+        await thoughtsAPI.create({
+          content,
+          mood: mapMoodToDB(mood),
+          shared,
+        });
+        toast.success("Thought saved 💭");
+      }
+      setTitle("");
+      setContent("");
+      setShared(true);
+      localStorage.removeItem(`dc-draft-${mode}`);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error: any) {
+      console.error("Failed to save:", error);
+      toast.error(error?.message || "Couldn't save — please try again");
+    } finally {
+      setSaving(false);
     }
-    setTitle("");
-    setContent("");
-    setShared(true);
-    localStorage.removeItem(`dc-draft-${mode}`);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   };
 
   return (
@@ -82,9 +89,8 @@ export default function Write() {
           <button
             key={m}
             onClick={() => setMode(m)}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${
-              mode === m ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"
-            }`}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${mode === m ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"
+              }`}
           >
             {m === "dream" ? "🌙 Dream" : "💭 Thought"}
           </button>
@@ -120,9 +126,8 @@ export default function Write() {
               <button
                 key={m}
                 onClick={() => setMood(m)}
-                className={`text-xl p-2 rounded-xl transition-all ${
-                  mood === m ? "bg-primary/20 scale-110" : "hover:bg-secondary/50"
-                }`}
+                className={`text-xl p-2 rounded-xl transition-all ${mood === m ? "bg-primary/20 scale-110" : "hover:bg-secondary/50"
+                  }`}
               >
                 {m}
               </button>
@@ -138,10 +143,10 @@ export default function Write() {
         <div className="flex items-center gap-4">
           <button
             onClick={handleSave}
-            disabled={!content.trim()}
+            disabled={!content.trim() || saving}
             className="px-6 py-3 rounded-full bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors disabled:opacity-40"
           >
-            Save {mode === "dream" ? "Dream" : "Thought"} 🌸
+            {saving ? "Saving…" : `Save ${mode === "dream" ? "Dream" : "Thought"} 🌸`}
           </button>
           {saved && (
             <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-accent-foreground">

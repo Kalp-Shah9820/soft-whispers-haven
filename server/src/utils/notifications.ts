@@ -34,6 +34,21 @@ export async function getPartnerPhones(
 }
 
 /**
+ * Get partner info (name and phone) for personalized notifications
+ */
+export async function getPartnerInfo(
+  prisma: PrismaClient,
+  mainUserId: string
+): Promise<{ phone: string; name: string } | null> {
+  const partner = await prisma.user.findFirst({
+    where: { partnerId: mainUserId },
+    select: { phone: true, name: true },
+  });
+  if (!partner?.phone) return null;
+  return { phone: partner.phone, name: partner.name || "your partner" };
+}
+
+/**
  * Get all WhatsApp notification recipients for a main user:
  * - The main user's own phone (if set)
  * - The linked partner's phone (if set)

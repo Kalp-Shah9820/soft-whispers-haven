@@ -1,21 +1,36 @@
 import { motion } from "framer-motion";
-import { useDreams, useLetters, useThoughts, useMoodHistory } from "@/lib/store";
+import { useSharedAPI } from "@/lib/store-api";
 import { Eye } from "lucide-react";
 
 export default function Shared() {
-  const [dreams] = useDreams();
-  const [letters] = useLetters();
-  const [thoughts] = useThoughts();
-  const [moodHistory] = useMoodHistory();
+  const { sharedDreams, sharedThoughts, sharedLetters, sharedMoods, loading } = useSharedAPI();
 
-  const sharedDreams = dreams.filter((d) => d.shared);
-  const sharedTargets = dreams.flatMap((d) => d.targets.filter((t) => t.shared).map((t) => ({ ...t, dreamTitle: d.title })));
   const today = new Date().toISOString().slice(0, 10);
-  const sharedLetters = letters.filter((l) => l.shared && (!l.sealed || (l.unlockDate && today >= l.unlockDate)));
-  const sharedThoughts = thoughts.filter((t) => t.shared);
-  const sharedMoods = moodHistory.filter((m) => m.shared);
 
-  const isEmpty = sharedDreams.length === 0 && sharedTargets.length === 0 && sharedLetters.length === 0 && sharedThoughts.length === 0 && sharedMoods.length === 0;
+  // Filter shared targets from shared dreams
+  const sharedTargets = sharedDreams.flatMap((d) =>
+    d.targets.filter((t) => t.shared).map((t) => ({ ...t, dreamTitle: d.title }))
+  );
+
+  // Filter letters that are unlocked
+  const unlockedSharedLetters = sharedLetters.filter(
+    (l) => !l.sealed || (l.unlockDate && today >= l.unlockDate)
+  );
+
+  const isEmpty =
+    sharedDreams.length === 0 &&
+    sharedTargets.length === 0 &&
+    unlockedSharedLetters.length === 0 &&
+    sharedThoughts.length === 0 &&
+    sharedMoods.length === 0;
+
+  if (loading) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-muted-foreground text-sm">Loading shared content… 💕</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -90,10 +105,10 @@ export default function Shared() {
             </div>
           )}
 
-          {sharedLetters.length > 0 && (
+          {unlockedSharedLetters.length > 0 && (
             <div className="space-y-3">
               <h2 className="font-display text-lg font-light text-foreground">Letters 💌</h2>
-              {sharedLetters.map((l) => (
+              {unlockedSharedLetters.map((l) => (
                 <div key={l.id} className="bg-card rounded-3xl p-5">
                   <p className="text-xs text-muted-foreground mb-2">Written on {new Date(l.createdAt).toLocaleDateString()}</p>
                   <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{l.content}</p>

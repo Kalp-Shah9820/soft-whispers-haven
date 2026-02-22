@@ -11,17 +11,16 @@ import {
 import { getMainUserPhones } from "../utils/notifications";
 
 const prisma = new PrismaClient();
-const isDevelopment = process.env.NODE_ENV === "development";
 
-// Development mode: run all jobs every 2 minutes
-const DEV_SCHEDULE = "*/2 * * * *";
+const cronEnabled = (process.env.CRON_ENABLED || "").toLowerCase() === "true";
 
-// Production schedules - individual constants to avoid TypeScript errors
-const dailyMotivationSchedule = isDevelopment ? DEV_SCHEDULE : "0 9 * * *";
-const waterReminderSchedule = isDevelopment ? DEV_SCHEDULE : "0 */2 * * *";
-const skincareSchedule = isDevelopment ? DEV_SCHEDULE : "0 9,21 * * *";
-const periodCareSchedule = isDevelopment ? DEV_SCHEDULE : "0 10 * * *";
-const emotionalCheckinSchedule = isDevelopment ? DEV_SCHEDULE : "0 20 * * *";
+// Real production schedules (server local time)
+const dailyMotivationSchedule = "0 9 * * *"; // 9:00 AM
+const emotionalCheckinSchedule = "0 20 * * *"; // 8:00 PM
+const skincareMorningSchedule = "0 8 * * *"; // 8:00 AM
+const skincareEveningSchedule = "0 21 * * *"; // 9:00 PM
+const waterReminderSchedule = "0 9-21/2 * * *"; // every 2 hours between 9 AM–9 PM
+const periodCareSchedule = "0 10 * * *"; // 10:00 AM
 
 // Daily motivation job
 async function runDailyMotivationJob() {
@@ -32,14 +31,16 @@ async function runDailyMotivationJob() {
       where: {
         role: "MAIN_USER",
         phone: { not: null },
+        notificationsEnabled: true,
+        showRest: true,
       },
     });
 
     console.log(`   Candidates found (daily motivation): ${users.length}`);
 
     for (const user of users) {
-      if (!user.phone) {
-        console.log(`   Skipping user ${user.name || user.id} - no phone number`);
+      if (!user.phone || !user.notificationsEnabled || !user.showRest) {
+        console.log(`   Skipping user ${user.name || user.id} - notifications disabled or showRest=false`);
         continue;
       }
 
@@ -54,6 +55,7 @@ async function runDailyMotivationJob() {
         const targets = await getMainUserPhones(prisma, user.id);
 
         for (const phone of targets) {
+          console.log(`[Daily Motivation] User: ${user.id}, Phone: ${phone}, Name: ${user.name || "N/A"}`);
           const result = await sendWhatsAppNotification(
             phone,
             `Good morning, ${user.name || "love"} 🌅\n\n${message}`
@@ -85,33 +87,26 @@ async function runWaterReminderJob() {
       where: {
         role: "MAIN_USER",
         phone: { not: null },
+        notificationsEnabled: true,
         showWater: true,
       },
     });
 
     console.log(`   Candidates found (water): ${users.length}`);
 
-    const now = new Date();
-    const currentHour = now.getHours();
-
-    // Only send between 9 AM and 9 PM, every 2 hours (9, 11, 13, ..., 21)
-    // Skip this check in development mode
-    if (!isDevelopment) {
-      if (currentHour < 9 || currentHour > 21) {
-        return;
-      }
-      if ((currentHour - 9) % 2 !== 0) {
-        return;
-      }
-    }
+    // Safety guard (cron should already enforce this)
+    const currentHour = new Date().getHours();
+    if (currentHour < 9 || currentHour > 21) return;
+    if ((currentHour - 9) % 2 !== 0) return;
 
     for (const user of users) {
-      if (!user.phone) continue;
+      if (!user.phone || !user.notificationsEnabled || !user.showWater) continue;
 
       try {
         const targets = await getMainUserPhones(prisma, user.id);
 
         for (const phone of targets) {
+          console.log(`[Water Reminder] User: ${user.id}, Phone: ${phone}, Name: ${user.name || "N/A"}`);
           const result = await sendWhatsAppNotification(
             phone,
             getWaterReminderMessage(user.name || undefined)
@@ -134,16 +129,15 @@ async function runWaterReminderJob() {
 }
 
 // Skincare reminders job
-async function runSkincareReminderJob() {
-  console.log("🧴 Running skincare reminder job...");
+async function runSkincareReminderJob(isMorning: boolean) {
+  console.log(`🧴 Running skincare reminder job (${isMorning ? "morning" : "evening"})...`);
   let messagesSent = 0;
   try {
-    const isMorning = new Date().getHours() < 12;
-
     const users = await prisma.user.findMany({
       where: {
         role: "MAIN_USER",
         phone: { not: null },
+        notificationsEnabled: true,
         showSkincare: true,
       },
     });
@@ -151,12 +145,17 @@ async function runSkincareReminderJob() {
     console.log(`   Candidates found (skincare): ${users.length}`);
 
     for (const user of users) {
-      if (!user.phone) continue;
+      if (!user.phone || !user.notificationsEnabled || !user.showSkincare) continue;
 
       try {
         const targets = await getMainUserPhones(prisma, user.id);
 
         for (const phone of targets) {
+          console.log(
+            `[Skincare Reminder:${isMorning ? "AM" : "PM"}] User: ${user.id}, Phone: ${phone}, Name: ${
+              user.name || "N/A"
+            }`
+          );
           const result = await sendWhatsAppNotification(
             phone,
             getSkincareReminderMessage(isMorning, user.name || undefined)
@@ -187,6 +186,7 @@ async function runPeriodCareReminderJob() {
       where: {
         role: "MAIN_USER",
         phone: { not: null },
+        notificationsEnabled: true,
         showPeriod: true,
         periodStartDate: { not: null },
       },
@@ -198,20 +198,20 @@ async function runPeriodCareReminderJob() {
     console.log(`   Candidates found (period care): ${users.length}`);
 
     for (const user of users) {
-      if (!user.phone || !user.periodStartDate) continue;
+      if (!user.phone || !user.notificationsEnabled || !user.showPeriod || !user.periodStartDate) continue;
 
       const lastPeriod = new Date(user.periodStartDate);
-      const daysSince = Math.floor(
+      const daysSinceStart = Math.floor(
         (today.getTime() - lastPeriod.getTime()) / (1000 * 60 * 60 * 24)
       );
 
-      // Typical cycle is 28 days, remind 2-3 days before
-      // In development mode, always send if user has periodStartDate set
-      if (isDevelopment || (daysSince >= 25 && daysSince <= 27)) {
+      // Period care: only if periodStartDate is within the last 5 days (inclusive)
+      if (daysSinceStart >= 0 && daysSinceStart <= 5) {
         try {
           const targets = await getMainUserPhones(prisma, user.id);
 
           for (const phone of targets) {
+            console.log(`[Period Care Reminder] User: ${user.id}, Phone: ${phone}, Name: ${user.name || "N/A"}`);
             const result = await sendWhatsAppNotification(
               phone,
               getPeriodCareMessage(user.name || undefined)
@@ -243,6 +243,7 @@ async function runEmotionalCheckinJob() {
       where: {
         role: "MAIN_USER",
         phone: { not: null },
+        notificationsEnabled: true,
         currentNeed: {
           in: ["REST", "MOTIVATION", "SUPPORT", "SPACE"],
         },
@@ -252,7 +253,7 @@ async function runEmotionalCheckinJob() {
     console.log(`   Candidates found (emotional check-in): ${users.length}`);
 
     for (const user of users) {
-      if (!user.phone) continue;
+      if (!user.phone || !user.notificationsEnabled) continue;
 
       // Only send once per day per need type
       const today = new Date().toISOString().slice(0, 10);
@@ -266,12 +267,12 @@ async function runEmotionalCheckinJob() {
       });
 
       // Only send if mood was logged today and need is set
-      // In development mode, send even without mood logged
-      if (isDevelopment || (todayMood && user.currentNeed !== "GENTLE_REMINDERS")) {
+      if (todayMood && user.currentNeed !== "GENTLE_REMINDERS") {
         try {
           const targets = await getMainUserPhones(prisma, user.id);
 
           for (const phone of targets) {
+            console.log(`[Emotional Check-in] User: ${user.id}, Phone: ${phone}, Name: ${user.name || "N/A"}`);
             const result = await sendWhatsAppNotification(
               phone,
               getEmotionalCheckinMessage(user.currentNeed, user.name || undefined)
@@ -295,8 +296,9 @@ async function runEmotionalCheckinJob() {
 }
 
 export function setupScheduledJobs() {
-  if (isDevelopment) {
-    console.log("🔧 Development mode: All jobs will run every 2 minutes");
+  if (!cronEnabled) {
+    console.log("⛔ CRON is disabled (set CRON_ENABLED=true to enable scheduled jobs).");
+    return;
   }
 
   // Daily motivation job
@@ -307,9 +309,12 @@ export function setupScheduledJobs() {
   cron.schedule(waterReminderSchedule, runWaterReminderJob);
   console.log(`✅ Water reminder job scheduled (${waterReminderSchedule})`);
 
-  // Skincare reminders job
-  cron.schedule(skincareSchedule, runSkincareReminderJob);
-  console.log(`✅ Skincare reminder job scheduled (${skincareSchedule})`);
+  // Skincare reminders jobs (morning + evening)
+  cron.schedule(skincareMorningSchedule, () => runSkincareReminderJob(true));
+  console.log(`✅ Skincare reminder job scheduled (${skincareMorningSchedule})`);
+
+  cron.schedule(skincareEveningSchedule, () => runSkincareReminderJob(false));
+  console.log(`✅ Skincare reminder job scheduled (${skincareEveningSchedule})`);
 
   // Period care reminders job
   cron.schedule(periodCareSchedule, runPeriodCareReminderJob);

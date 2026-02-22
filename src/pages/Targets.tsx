@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
-import { useDreams, TARGET_STATE_LABELS, type TargetState } from "@/lib/store";
+import { useDreamsAPI } from "@/lib/store-api";
+import { TARGET_STATE_LABELS, type TargetState } from "@/lib/store";
 import { Link } from "react-router-dom";
 
 const STATES: TargetState[] = ["starting", "in-progress", "feels-good", "resting"];
 
 export default function Targets() {
-  const [dreams] = useDreams();
+  const [dreams] = useDreamsAPI();
   const allTargets = dreams.flatMap((d) => d.targets.map((t) => ({ ...t, dreamTitle: d.title })));
 
   return (

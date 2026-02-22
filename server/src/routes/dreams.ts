@@ -2,10 +2,11 @@ import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import { AuthRequest, requireMainUser } from "../middleware/auth";
 import { sendWhatsAppNotification } from "../services/whatsapp";
-import { getPartnerPhones } from "../utils/notifications";
+import { getPartnerInfo } from "../utils/notifications";
 
 const router = Router();
 const prisma = new PrismaClient();
+// Note: authenticateToken is applied globally in server/src/index.ts at api.use(authenticateToken)
 
 // Get all dreams (filtered by role)
 router.get("/", async (req: AuthRequest, res) => {
@@ -122,21 +123,21 @@ router.post("/", requireMainUser, async (req: AuthRequest, res) => {
     // Notify partner only (event-based relationship update)
     if (shared) {
       try {
-        const targets = await getPartnerPhones(prisma, req.userId!);
-        if (targets.length > 0) {
+        const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { name: true } });
+        const partnerInfo = await getPartnerInfo(prisma, req.userId!);
+        if (partnerInfo) {
           console.log("Partner found");
-          console.log(`Sending partner notification: dream (to ${targets.length} recipient(s))`);
+          console.log(`[Partner Notification: Dream] User: ${req.userId!}, Partner Phone: ${partnerInfo.phone}, Partner Name: ${partnerInfo.name}`);
+          console.log(`Sending partner notification: dream`);
 
-          for (const phone of targets) {
-            const result = await sendWhatsAppNotification(
-              phone,
-              "🌙 A new dream was shared with you."
-            );
-            if (result.success) {
-              console.log("Notification sent successfully");
-            } else {
-              console.error("Failed to notify dream recipient:", result.error, `(${phone})`);
-            }
+          const result = await sendWhatsAppNotification(
+            partnerInfo.phone,
+            `🌙 ${user?.name || "Your partner"} shared a new dream with you.`
+          );
+          if (result.success) {
+            console.log("Notification sent successfully");
+          } else {
+            console.error("Failed to notify dream recipient:", result.error, `(${partnerInfo.phone})`);
           }
         }
       } catch (error: any) {
@@ -217,23 +218,64 @@ router.patch("/:id", requireMainUser, async (req: AuthRequest, res) => {
 // Delete dream
 router.delete("/:id", requireMainUser, async (req: AuthRequest, res) => {
   try {
+    // STEP 3: Log Express route params
+    console.log("[DELETE /dreams/:id] ===== BACKEND DELETE FLOW TRACE =====");
+    console.log("[DELETE /dreams/:id] 1. req.params:", req.params);
+    console.log("[DELETE /dreams/:id] 2. req.params.id:", req.params.id);
+    console.log("[DELETE /dreams/:id] 3. req.userId:", req.userId);
+    console.log("[DELETE /dreams/:id] 4. req.userRole:", req.userRole);
+    
+    // Log received id for debugging
+    console.log(`[DELETE /dreams/:id] Received delete request for dream id: "${id}"`);
+    
     const { id } = req.params;
-
-    const existing = await prisma.dream.findUnique({
-      where: { id },
-    });
-
-    if (!existing || existing.userId !== req.userId) {
-      return res.status(403).json({ error: "Access denied" });
+    
+    if (!id || id === "undefined" || id === "null") {
+      console.error(`[DELETE /dreams/:id] 5. Invalid id parameter: ${id}`);
+      return res.status(400).json({ error: "Dream id is required" });
+    }
+    
+    if (!req.userId) {
+      console.error(`[DELETE /dreams/${id}] 6. No userId in request - auth middleware failed`);
+      return res.status(401).json({ error: "Authentication required" });
     }
 
-    await prisma.dream.delete({
-      where: { id },
+    // STEP 4: Log Prisma query details
+    console.log(`[DELETE /dreams/${id}] 7. Querying database with:`, {
+      id: id,
+      userId: req.userId,
+      query: "findFirst({ where: { id, userId } })"
     });
 
-    res.json({ success: true });
+    // Only delete if it belongs to the logged-in user.
+    // If it's not theirs (or doesn't exist), return 404 (not 403) to avoid client retry/toast loops.
+    const ownedDream = await prisma.dream.findFirst({
+      where: { id, userId: req.userId },
+      select: { id: true, userId: true },
+    });
+
+    console.log(`[DELETE /dreams/${id}] 8. Prisma query result:`, ownedDream);
+
+    if (!ownedDream) {
+      // Check if dream exists at all (for debugging)
+      const anyDream = await prisma.dream.findUnique({
+        where: { id },
+        select: { id: true, userId: true },
+      });
+      console.log(`[DELETE /dreams/${id}] 9. Dream exists in DB?`, !!anyDream);
+      if (anyDream) {
+        console.log(`[DELETE /dreams/${id}] 10. Dream belongs to userId: ${anyDream.userId}, requester userId: ${req.userId}`);
+        console.log(`[DELETE /dreams/${id}] 11. Ownership mismatch! Dream.userId (${anyDream.userId}) !== req.userId (${req.userId})`);
+      }
+      console.log(`[DELETE /dreams/${id}] 12. Returning 404 - Dream not found or doesn't belong to user`);
+      return res.status(404).json({ error: "Dream not found" });
+    }
+
+    await prisma.dream.delete({ where: { id } });
+    console.log(`[DELETE /dreams/${id}] 13. Successfully deleted dream for user ${req.userId}`);
+    return res.json({ success: true });
   } catch (error: any) {
-    console.error("Delete dream error:", error);
+    console.error(`[DELETE /dreams/${req.params.id}] 14. Error:`, error);
     res.status(500).json({ error: "Failed to delete dream" });
   }
 });

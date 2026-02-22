@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import { useRole } from "@/lib/store";
+import { useRoleAPI } from "@/lib/store-api";
 import { authAPI, clearAuthToken } from "@/lib/api";
 import { HideModeProvider } from "@/lib/hideMode";
 import Layout from "@/components/Layout";
@@ -74,21 +74,8 @@ function AuthBootstrapper({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function AppContent() {
-  const [role] = useRole();
-
-  return (
-    <>
-      <MoodCheckModal />
-      <Layout>
-        <Home />
-      </Layout>
-    </>
-  );
-}
-
 function HomeWrapper() {
-  const [role] = useRole();
+  const [role] = useRoleAPI();
   return (
     <>
       <MoodCheckModal />

@@ -1,7 +1,7 @@
 import { NavLink } from "@/components/NavLink";
 import { Home, PenLine, BookHeart, Target, Heart, Mail, Eye, Settings, Menu, X, MessageCircle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useSettings, useRole } from "@/lib/store";
+import { useSettingsAPI, useRoleAPI } from "@/lib/store-api";
 import { motion, AnimatePresence } from "framer-motion";
 import { useHideMode } from "@/lib/hideMode";
 
@@ -19,8 +19,8 @@ const navItems = [
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [settings] = useSettings();
-  const [role] = useRole();
+  const [settings] = useSettingsAPI();
+  const [role] = useRoleAPI();
   const { hideMode, exitHideMode } = useHideMode();
   const [escCount, setEscCount] = useState(0);
 

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import { AuthRequest, requireMainUser } from "../middleware/auth";
 import { sendWhatsAppNotification } from "../services/whatsapp";
-import { getPartnerPhones } from "../utils/notifications";
+import { getPartnerInfo } from "../utils/notifications";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -135,21 +135,20 @@ router.patch("/", async (req: AuthRequest, res) => {
     // Notify partner only when MAIN_USER changes current need (event-based)
     if (currentNeed !== undefined) {
       try {
-        const targets = await getPartnerPhones(prisma, req.userId!);
-        if (targets.length > 0) {
+        const partnerInfo = await getPartnerInfo(prisma, req.userId!);
+        if (partnerInfo) {
           console.log("Partner found");
-          console.log(`Sending partner notification: needs update (to ${targets.length} recipient(s))`);
+          console.log(`[Partner Notification: Needs Update] User: ${req.userId!}, Partner Phone: ${partnerInfo.phone}, Partner Name: ${partnerInfo.name}`);
+          console.log(`Sending partner notification: needs update`);
 
-          for (const phone of targets) {
-            const result = await sendWhatsAppNotification(
-              phone,
-              "❤️ Your partner updated what they need right now."
-            );
-            if (result.success) {
-              console.log("Notification sent successfully");
-            } else {
-              console.error("Failed to notify need-change recipient:", result.error, `(${phone})`);
-            }
+          const result = await sendWhatsAppNotification(
+            partnerInfo.phone,
+            `❤️ ${user.name || "Your partner"} updated what they need right now.`
+          );
+          if (result.success) {
+            console.log("Notification sent successfully");
+          } else {
+            console.error("Failed to notify need-change recipient:", result.error, `(${partnerInfo.phone})`);
           }
         }
       } catch (error: any) {

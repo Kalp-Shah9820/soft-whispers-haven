@@ -35,6 +35,7 @@ function parseAllowedOrigins(raw: string | undefined): string[] {
 // In production, prefer setting FRONTEND_URL (comma-separated) to restrict origins.
 function isDevAllowedOrigin(origin: string): boolean {
   // Matches http://localhost:*, http://127.0.0.1:* and typical private LAN ranges.
+  // Explicitly allow common Vite dev server ports (5173, 8080, 3000, etc.)
   const devOriginRegex =
     /^http:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d{1,5})?$/i;
   return devOriginRegex.test(origin);

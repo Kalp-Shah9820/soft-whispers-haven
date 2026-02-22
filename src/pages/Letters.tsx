@@ -1,39 +1,81 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useLetters, genId } from "@/lib/store";
+import { useLettersAPI } from "@/lib/store-api";
+import { lettersAPI } from "@/lib/api";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Mail, Lock, Unlock, Plus, Edit3, Check, X } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
 
 export default function Letters() {
-  const [letters, setLetters] = useLetters();
+  const [letters, setLetters] = useLettersAPI();
   const [writing, setWriting] = useState(false);
   const [content, setContent] = useState("");
   const [unlockDate, setUnlockDate] = useState("");
   const [shared, setShared] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const saveLetter = () => {
-    if (!content.trim()) return;
-    setLetters((prev) => [
-      ...prev,
-      { id: genId(), content, unlockDate: unlockDate || "", shared, sealed: !!unlockDate, createdAt: new Date().toISOString() },
-    ]);
-    setContent("");
-    setUnlockDate("");
-    setShared(true);
-    setWriting(false);
+  const saveLetter = async () => {
+    if (!content.trim() || saving) return;
+    setSaving(true);
+    try {
+      const { letter } = await lettersAPI.create({
+        content,
+        unlockDate: unlockDate || undefined,
+        shared,
+        sealed: !!unlockDate,
+      });
+      setLetters((prev) => [
+        ...prev,
+        {
+          id: letter.id,
+          content: letter.content,
+          unlockDate: letter.unlockDate || "",
+          shared: letter.shared,
+          sealed: letter.sealed,
+          createdAt: letter.createdAt,
+        },
+      ]);
+      setContent("");
+      setUnlockDate("");
+      setShared(true);
+      setWriting(false);
+    } catch (error: any) {
+      console.error("Failed to save letter:", error);
+      toast.error(error?.message || "Couldn't save letter 💌");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const toggleSeal = (id: string) => {
-    setLetters((prev) => prev.map((l) => (l.id === id ? { ...l, sealed: !l.sealed } : l)));
+  const toggleSeal = async (id: string) => {
+    const letter = letters.find((l) => l.id === id);
+    if (!letter) return;
+    const newSealed = !letter.sealed;
+    setLetters((prev) => prev.map((l) => (l.id === id ? { ...l, sealed: newSealed } : l)));
+    try {
+      await lettersAPI.update(id, { sealed: newSealed });
+    } catch (error) {
+      setLetters((prev) => prev.map((l) => (l.id === id ? { ...l, sealed: !newSealed } : l)));
+      toast.error("Couldn't update letter 💌");
+    }
   };
 
-  const toggleShare = (id: string) => {
-    setLetters((prev) => prev.map((l) => (l.id === id ? { ...l, shared: !l.shared } : l)));
+  const toggleShare = async (id: string) => {
+    const letter = letters.find((l) => l.id === id);
+    if (!letter) return;
+    const newShared = !letter.shared;
+    setLetters((prev) => prev.map((l) => (l.id === id ? { ...l, shared: newShared } : l)));
+    try {
+      await lettersAPI.update(id, { shared: newShared });
+    } catch (error) {
+      setLetters((prev) => prev.map((l) => (l.id === id ? { ...l, shared: !newShared } : l)));
+      toast.error("Couldn't update sharing 💌");
+    }
   };
 
   const startEdit = (id: string, content: string) => {
@@ -41,13 +83,25 @@ export default function Letters() {
     setEditContent(content);
   };
 
-  const saveEdit = (id: string) => {
+  const saveEdit = async (id: string) => {
     setLetters((prev) => prev.map((l) => (l.id === id ? { ...l, content: editContent } : l)));
     setEditingId(null);
+    try {
+      await lettersAPI.update(id, { content: editContent });
+    } catch (error) {
+      toast.error("Couldn't save edit 💌");
+    }
   };
 
-  const deleteLetter = (id: string) => {
+  const deleteLetter = async (id: string) => {
+    const removed = letters.find((l) => l.id === id);
     setLetters((prev) => prev.filter((l) => l.id !== id));
+    try {
+      await lettersAPI.delete(id);
+    } catch (error) {
+      if (removed) setLetters((prev) => [...prev, removed]);
+      toast.error("Couldn't delete letter 💌");
+    }
   };
 
   const isUnlocked = (letter: { unlockDate: string; sealed: boolean }) => {
@@ -95,8 +149,8 @@ export default function Letters() {
             </div>
           </div>
           <div className="flex gap-3">
-            <button onClick={saveLetter} disabled={!content.trim()} className="px-5 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40">
-              Save letter 💌
+            <button onClick={saveLetter} disabled={!content.trim() || saving} className="px-5 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-40">
+              {saving ? "Saving…" : "Save letter 💌"}
             </button>
             <button onClick={() => setWriting(false)} className="px-5 py-2.5 rounded-full bg-secondary text-secondary-foreground text-sm">
               Cancel

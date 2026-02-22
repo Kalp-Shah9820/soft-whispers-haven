@@ -1,28 +1,49 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { useMoodHistory, useLastMoodCheck, useSettings, VISIT_MOOD_LABELS, type VisitMood } from "@/lib/store";
-import { useState } from "react";
+import { useSettingsAPI } from "@/lib/store-api";
+import { moodsAPI, mapVisitMoodToDB } from "@/lib/api";
+import { VISIT_MOOD_LABELS, type VisitMood } from "@/lib/store";
+import { useState, useEffect } from "react";
 
 const VISIT_MOODS: VisitMood[] = ["😊", "😔", "😌", "😟", "😴", "💗", "😤"];
 
 export default function MoodCheckModal() {
-  const [lastCheck, setLastCheck] = useLastMoodCheck();
-  const [history, setHistory] = useMoodHistory();
-  const [settings] = useSettings();
-  const today = new Date().toISOString().slice(0, 10);
+  const [settings] = useSettingsAPI();
   const [selectedMood, setSelectedMood] = useState<VisitMood | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const [hasMoodToday, setHasMoodToday] = useState<boolean | null>(null);
 
-  const shouldShow = lastCheck !== today && !dismissed;
+  // Check if mood was logged today via API — this is the single source of truth
+  useEffect(() => {
+    const checkMoodToday = async () => {
+      try {
+        const { mood } = await moodsAPI.getToday();
+        setHasMoodToday(!!mood);
+      } catch (error) {
+        console.error("Failed to check today's mood:", error);
+        // Default to not showing if we can't reach backend
+        setHasMoodToday(true);
+      }
+    };
+    checkMoodToday();
+  }, []);
 
-  const handleSelect = (mood: VisitMood) => {
+  const shouldShow = hasMoodToday === false && !dismissed;
+
+  const handleSelect = async (mood: VisitMood) => {
     setSelectedMood(mood);
-    setLastCheck(today);
-    setHistory((prev) => [...prev, { mood, date: today, shared: settings.globalSharing }]);
+    try {
+      await moodsAPI.log({
+        mood: mapVisitMoodToDB(mood),
+        shared: settings.globalSharing,
+      });
+      setHasMoodToday(true);
+    } catch (error) {
+      console.error("Failed to save mood:", error);
+    }
     setTimeout(() => setDismissed(true), 3000);
   };
 
   const skip = () => {
-    setLastCheck(today);
     setDismissed(true);
   };
 

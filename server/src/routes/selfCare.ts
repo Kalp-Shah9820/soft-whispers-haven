@@ -2,7 +2,7 @@ import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import { AuthRequest, requireMainUser } from "../middleware/auth";
 import { sendWhatsAppNotification } from "../services/whatsapp";
-import { getPartnerPhones } from "../utils/notifications";
+import { getPartnerInfo } from "../utils/notifications";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -86,21 +86,21 @@ router.patch("/:id", async (req: AuthRequest, res) => {
     // Notify partner only (event-based relationship update)
     if (checked === true) {
       try {
-        const targets = await getPartnerPhones(prisma, req.userId!);
-        if (targets.length > 0) {
+        const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { name: true } });
+        const partnerInfo = await getPartnerInfo(prisma, req.userId!);
+        if (partnerInfo) {
           console.log("Partner found");
-          console.log(`Sending partner notification: self-care completion (to ${targets.length} recipient(s))`);
+          console.log(`[Partner Notification: Self-Care] User: ${req.userId!}, Partner Phone: ${partnerInfo.phone}, Partner Name: ${partnerInfo.name}`);
+          console.log(`Sending partner notification: self-care completion`);
 
-          for (const phone of targets) {
-            const result = await sendWhatsAppNotification(
-              phone,
-              "🌿 Your partner completed a self-care activity."
-            );
-            if (result.success) {
-              console.log("Notification sent successfully");
-            } else {
-              console.error("Failed to notify self-care completion recipient:", result.error, `(${phone})`);
-            }
+          const result = await sendWhatsAppNotification(
+            partnerInfo.phone,
+            `🌿 ${user?.name || "Your partner"} completed a self-care step: ${existing.label}`
+          );
+          if (result.success) {
+            console.log("Notification sent successfully");
+          } else {
+            console.error("Failed to notify self-care completion recipient:", result.error, `(${partnerInfo.phone})`);
           }
         }
       } catch (error: any) {

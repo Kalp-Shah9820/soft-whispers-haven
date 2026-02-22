@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
-import { getDailyMessage, useEmotionalCheckin, useSettings, useMoodHistory, getPersonalizedGreeting, type Mood } from "@/lib/store";
+import { getDailyMessage, getPersonalizedGreeting, type Mood } from "@/lib/store";
+import { useSettingsAPI, useEmotionalCheckinAPI, useMoodHistoryAPI } from "@/lib/store-api";
 import { Link } from "react-router-dom";
 import { PenLine, BookHeart, Heart } from "lucide-react";
 
@@ -19,9 +20,9 @@ const fadeIn = {
 };
 
 export default function Home() {
-  const [checkin, setCheckin] = useEmotionalCheckin();
-  const [settings] = useSettings();
-  const [moodHistory] = useMoodHistory();
+  const [checkin, setCheckin] = useEmotionalCheckinAPI();
+  const [settings] = useSettingsAPI();
+  const [moodHistory] = useMoodHistoryAPI();
   const message = getDailyMessage();
 
   // Get today's mood for tone adjustment
@@ -50,11 +51,10 @@ export default function Home() {
             <button
               key={emoji}
               onClick={() => setCheckin(emoji)}
-              className={`flex flex-col items-center gap-1 px-4 py-3 rounded-2xl transition-all ${
-                checkin === emoji
+              className={`flex flex-col items-center gap-1 px-4 py-3 rounded-2xl transition-all ${checkin === emoji
                   ? "bg-primary/20 scale-110 shadow-sm"
                   : "bg-secondary/40 hover:bg-secondary/70"
-              }`}
+                }`}
             >
               <span className="text-2xl">{emoji}</span>
               <span className="text-xs text-muted-foreground">{label}</span>

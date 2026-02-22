@@ -378,3 +378,73 @@
 
     return [role, setRole] as const;
   };
+
+  // Shared content hook (for partner view and shared page)
+  export function useSharedAPI() {
+    const [sharedDreams, setSharedDreams] = useState<Dream[]>([]);
+    const [sharedThoughts, setSharedThoughts] = useState<Thought[]>([]);
+    const [sharedLetters, setSharedLetters] = useState<Letter[]>([]);
+    const [sharedMoods, setSharedMoods] = useState<MoodEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+      loadShared();
+    }, []);
+
+    const loadShared = async () => {
+      try {
+        const data = await sharedAPI.getAll();
+        setSharedDreams(
+          (data.dreams || []).map((d: any) => ({
+            id: d.id,
+            title: d.title,
+            content: d.content,
+            mood: mapMoodFromDB(d.mood) as Mood,
+            shared: d.shared,
+            createdAt: d.createdAt,
+            updatedAt: d.updatedAt,
+            targets: (d.targets || []).map((t: any) => ({
+              id: t.id,
+              dreamId: t.dreamId,
+              text: t.text,
+              state: mapTargetStateFromDB(t.state) as TargetState,
+              shared: t.shared,
+            })),
+          }))
+        );
+        setSharedThoughts(
+          (data.thoughts || []).map((t: any) => ({
+            id: t.id,
+            content: t.content,
+            mood: mapMoodFromDB(t.mood) as Mood,
+            shared: t.shared,
+            createdAt: t.createdAt,
+            updatedAt: t.updatedAt,
+          }))
+        );
+        setSharedLetters(
+          (data.letters || []).map((l: any) => ({
+            id: l.id,
+            content: l.content,
+            unlockDate: l.unlockDate || "",
+            shared: l.shared,
+            sealed: l.sealed,
+            createdAt: l.createdAt,
+          }))
+        );
+        setSharedMoods(
+          (data.moods || []).map((m: any) => ({
+            mood: mapVisitMoodFromDB(m.mood) as VisitMood,
+            date: m.date,
+            shared: m.shared,
+          }))
+        );
+      } catch (error) {
+        console.error("Failed to load shared content:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    return { sharedDreams, sharedThoughts, sharedLetters, sharedMoods, loading };
+  }

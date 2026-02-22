@@ -1,10 +1,10 @@
 import { motion } from "framer-motion";
-import { useDreams } from "@/lib/store";
+import { useDreamsAPI } from "@/lib/store-api";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 
 export default function Dreams() {
-  const [dreams] = useDreams();
+  const [dreams] = useDreamsAPI();
   const [filter, setFilter] = useState<"all" | "shared" | "private">("all");
 
   const filtered = dreams.filter((d) => {
@@ -26,9 +26,8 @@ export default function Dreams() {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-full text-xs font-medium transition-colors ${
-              filter === f ? "bg-primary/20 text-primary" : "bg-secondary/40 text-muted-foreground hover:bg-secondary/60"
-            }`}
+            className={`px-4 py-2 rounded-full text-xs font-medium transition-colors ${filter === f ? "bg-primary/20 text-primary" : "bg-secondary/40 text-muted-foreground hover:bg-secondary/60"
+              }`}
           >
             {f === "all" ? "All" : f === "shared" ? "💕 Shared" : "🔒 Private"}
           </button>

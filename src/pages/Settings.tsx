@@ -1,10 +1,11 @@
 import { motion } from "framer-motion";
-import { useSettings, useRole, type CurrentNeed } from "@/lib/store";
+import { type CurrentNeed } from "@/lib/store";
+import { useSettingsAPI, useRoleAPI } from "@/lib/store-api";
 import { Switch } from "@/components/ui/switch";
 import { Shield, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useHideMode } from "@/lib/hideMode";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { settingsAPI } from "@/lib/api";
 import { useState } from "react";
 
@@ -18,8 +19,8 @@ const NEEDS: { value: CurrentNeed; label: string; emoji: string }[] = [
 ];
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useSettings();
-  const [, setRole] = useRole();
+  const [settings, setSettings] = useSettingsAPI();
+  const [, setRole] = useRoleAPI();
   const navigate = useNavigate();
   const { hideMode, enterHideMode, exitHideMode } = useHideMode();
   const [activating, setActivating] = useState(false);
@@ -134,11 +135,10 @@ export default function SettingsPage() {
             <button
               key={need.value}
               onClick={() => update({ currentNeed: need.value })}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm transition-all ${
-                settings.currentNeed === need.value
-                  ? "bg-primary/20 text-primary scale-105"
-                  : "bg-secondary/40 text-muted-foreground hover:bg-secondary/60"
-              }`}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm transition-all ${settings.currentNeed === need.value
+                ? "bg-primary/20 text-primary scale-105"
+                : "bg-secondary/40 text-muted-foreground hover:bg-secondary/60"
+                }`}
             >
               <span>{need.emoji}</span> {need.label}
             </button>
@@ -184,11 +184,10 @@ export default function SettingsPage() {
               <button
                 key={h}
                 onClick={() => update({ waterReminderFrequency: h })}
-                className={`px-4 py-2 rounded-full text-sm transition-all ${
-                  settings.waterReminderFrequency === h
-                    ? "bg-primary/20 text-primary"
-                    : "bg-secondary/40 text-muted-foreground hover:bg-secondary/60"
-                }`}
+                className={`px-4 py-2 rounded-full text-sm transition-all ${settings.waterReminderFrequency === h
+                  ? "bg-primary/20 text-primary"
+                  : "bg-secondary/40 text-muted-foreground hover:bg-secondary/60"
+                  }`}
               >
                 Every {h}h
               </button>
@@ -225,11 +224,10 @@ export default function SettingsPage() {
         </p>
         <button
           onClick={() => (hideMode ? exitHideMode() : enterHideMode())}
-          className={`px-5 py-2.5 rounded-full text-sm font-medium transition-colors ${
-            hideMode
-              ? "bg-accent text-accent-foreground"
-              : "bg-destructive/20 text-destructive hover:bg-destructive/30"
-          }`}
+          className={`px-5 py-2.5 rounded-full text-sm font-medium transition-colors ${hideMode
+            ? "bg-accent text-accent-foreground"
+            : "bg-destructive/20 text-destructive hover:bg-destructive/30"
+            }`}
         >
           {hideMode ? "Show Everything Again 🌸" : "Hide Everything 🚨"}
         </button>
