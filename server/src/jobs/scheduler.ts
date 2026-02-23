@@ -77,7 +77,7 @@ async function sendToUser(phone: string, message: string): Promise<boolean> {
 // 1. Daily Motivation — once per day at user-selected time
 // ---------------------------------------------------------------------------
 async function runDailyMotivationJob() {
-  if (currentMinute() !== new Date().getMinutes()) return;
+  if (currentMinute() !== 0) return;
   const now = nowHHMM();
 
   const users = await prisma.user.findMany({
@@ -108,7 +108,7 @@ async function runDailyMotivationJob() {
 // ---------------------------------------------------------------------------
 async function runWaterReminderJob() {
   const hour = currentHour();
-  if (currentMinute() !== new Date().getMinutes()) return;       // top of hour only
+  if (currentMinute() !== 0) return;        // top of hour only
   if (hour < 9 || hour > 21) return;
 
   const users = await prisma.user.findMany({
@@ -130,7 +130,7 @@ async function runWaterReminderJob() {
 // 3. Skincare — max 1 AM + 1 PM per day
 // ---------------------------------------------------------------------------
 async function runSkincareReminderJob() {
-  if (currentMinute() !== new Date().getMinutes()) return;
+  if (currentMinute() !== 0) return;
   const now = nowHHMM();
 
   const users = await prisma.user.findMany({
@@ -158,7 +158,7 @@ async function runSkincareReminderJob() {
 // ---------------------------------------------------------------------------
 async function runPeriodCareReminderJob() {
   const hour = currentHour();
-  if (currentMinute() !== new Date().getMinutes()) return;
+  if (currentMinute() !== 0) return;
 
   // Send at 09:00, 13:00, 17:00, 21:00
   const PERIOD_HOURS = [9, 13, 17, 21];
@@ -197,7 +197,7 @@ async function runPeriodCareReminderJob() {
 // 5. Emotional Check-in — max 3/day, only if mood NOT yet logged
 // ---------------------------------------------------------------------------
 async function runEmotionalCheckinJob() {
-  if (currentMinute() !== new Date().getMinutes()) return;
+  if (currentMinute() !== 0) return;
   const hour = currentHour();
 
   // Send at user's selected time, then re-send at +2h and +4h if still no mood
