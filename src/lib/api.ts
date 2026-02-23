@@ -1,6 +1,6 @@
 // Central API client — all requests go through apiRequest() below.
 // Set VITE_API_URL in your frontend .env to override the default.
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:3001/api";
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "https://soft-whispers-haven.onrender.com/api";
 
 // Sanity-check at module load: catch obvious mis-configurations.
 if (!API_BASE_URL.startsWith("http://") && !API_BASE_URL.startsWith("https://")) {
