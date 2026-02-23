@@ -131,8 +131,28 @@ const api = Router();
 api.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
+
+// Diagnostics: checks env + DB without exposing secrets
+api.get("/health/check", async (req, res) => {
+  const checks: Record<string, boolean | string> = {
+    DATABASE_URL: !!process.env.DATABASE_URL,
+    JWT_SECRET: !!process.env.JWT_SECRET,
+    NODE_ENV: process.env.NODE_ENV || "not set",
+  };
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    checks.db_connection = true;
+  } catch (e: any) {
+    checks.db_connection = false;
+    checks.db_error = e?.message?.slice(0, 120) || "unknown";
+  }
+  const ok = checks.DATABASE_URL === true && checks.JWT_SECRET === true && checks.db_connection === true;
+  res.status(ok ? 200 : 500).json({ ok, checks });
+});
+
 api.use("/auth", authRoutes);
 api.use("/test", testRoutes);
+
 
 // Protected API
 api.use(authenticateToken);
