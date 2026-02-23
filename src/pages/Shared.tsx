@@ -3,7 +3,7 @@ import { useSharedAPI } from "@/lib/store-api";
 import { Eye } from "lucide-react";
 
 export default function Shared() {
-  const { sharedDreams, sharedThoughts, sharedLetters, sharedMoods, loading } = useSharedAPI();
+  const { sharedDreams, sharedThoughts, sharedLetters, sharedMoods, sharedSelfCare, loading } = useSharedAPI();
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -17,12 +17,16 @@ export default function Shared() {
     (l) => !l.sealed || (l.unlockDate && today >= l.unlockDate)
   );
 
+  // Self-care wins today
+  const todaySelfCare = sharedSelfCare.filter((s) => s.date === today);
+
   const isEmpty =
     sharedDreams.length === 0 &&
     sharedTargets.length === 0 &&
     unlockedSharedLetters.length === 0 &&
     sharedThoughts.length === 0 &&
-    sharedMoods.length === 0;
+    sharedMoods.length === 0 &&
+    sharedSelfCare.length === 0;
 
   if (loading) {
     return (
@@ -114,6 +118,37 @@ export default function Shared() {
                   <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{l.content}</p>
                 </div>
               ))}
+            </div>
+          )}
+
+          {(todaySelfCare.length > 0 || (sharedSelfCare.length > 0 && todaySelfCare.length === 0)) && (
+            <div className="space-y-3">
+              <h2 className="font-display text-lg font-light text-foreground">Self-Care Wins 💖</h2>
+              {todaySelfCare.length > 0 ? (
+                <div className="bg-card rounded-2xl p-4">
+                  <p className="text-xs text-muted-foreground mb-3">Today's gentle victories ✨</p>
+                  <div className="flex flex-wrap gap-2">
+                    {todaySelfCare.map((s) => (
+                      <span
+                        key={s.id}
+                        className="text-sm bg-primary/10 text-primary rounded-full px-3 py-1"
+                      >
+                        ✓ {s.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                sharedSelfCare.slice(0, 10).map((s) => (
+                  <div key={s.id} className="bg-card rounded-2xl px-4 py-2 flex items-center gap-3">
+                    <span className="text-primary">✓</span>
+                    <div>
+                      <p className="text-sm text-foreground">{s.label}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(s.date).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </>

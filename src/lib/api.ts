@@ -259,7 +259,13 @@ export const sharedAPI = {
       thoughts: any[];
       letters: any[];
       moods: any[];
+      selfCare: any[];
     }>("/shared");
+  },
+  getFeed: async () => {
+    return apiRequest<{
+      feed: { type: string; data: any; timestamp: string }[];
+    }>("/shared/feed");
   },
 };
 
