@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -27,51 +27,60 @@ const queryClient = new QueryClient();
 
 function AuthBootstrapper({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const run = useCallback(async () => {
+    setError(false);
+    setReady(false);
 
-    async function ensureAuth() {
+    // Retry up to 3 times — handles Render free-tier cold starts (~30s)
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        // If we already have a token, verify it; otherwise bootstrap a new one.
         try {
           await authAPI.getMe();
-          if (!cancelled) {
-            setReady(true);
-          }
+          setReady(true);
           return;
         } catch {
-          // Token missing or invalid – clear and bootstrap a fresh one.
           clearAuthToken();
         }
-
         await authAPI.bootstrap();
+        setReady(true);
+        return;
       } catch (e) {
-        // In a private app, we quietly fall back to local-only behavior if backend is unreachable.
-        console.error("Auth bootstrap failed:", e);
-      } finally {
-        if (!cancelled) {
-          setReady(true);
-        }
+        console.error(`Auth bootstrap attempt ${attempt} failed:`, e);
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 2000));
       }
     }
 
-    ensureAuth();
-
-    return () => {
-      cancelled = true;
-    };
+    // All retries exhausted — surface error but still render the app
+    setError(true);
+    setReady(true);
   }, []);
+
+  useEffect(() => { run(); }, [run]);
 
   if (!ready) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background text-sm text-muted-foreground">
-        Soft Whispers is getting ready for you…
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-2">
+        <p className="text-muted-foreground text-sm animate-pulse">Soft Whispers is getting ready for you…</p>
+        <p className="text-xs text-muted-foreground/50">Connecting to server…</p>
       </div>
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {error && (
+        <div className="fixed top-0 inset-x-0 z-50 bg-destructive/90 text-white text-sm text-center py-2 px-4 flex items-center justify-center gap-3">
+          <span>⚠️ Could not connect to the server. Some features won't work.</span>
+          <button onClick={run} className="underline underline-offset-2 font-medium hover:no-underline">
+            Retry
+          </button>
+        </div>
+      )}
+      {children}
+    </>
+  );
 }
 
 function HomeWrapper() {
