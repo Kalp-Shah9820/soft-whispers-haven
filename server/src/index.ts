@@ -32,13 +32,15 @@ function parseAllowedOrigins(raw: string | undefined): string[] {
 }
 
 // Allow localhost + private LAN IPs during development so Vite can run on any port/host.
-// In production, prefer setting FRONTEND_URL (comma-separated) to restrict origins.
 function isDevAllowedOrigin(origin: string): boolean {
-  // Matches http://localhost:*, http://127.0.0.1:* and typical private LAN ranges.
-  // Explicitly allow common Vite dev server ports (5173, 8080, 3000, etc.)
   const devOriginRegex =
     /^http:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d{1,5})?$/i;
   return devOriginRegex.test(origin);
+}
+
+// Allow any Vercel preview deployment for this project (subdomain changes per commit).
+function isVercelPreviewOrigin(origin: string): boolean {
+  return /^https:\/\/soft-whispers-haven-7cuq[a-z0-9-]*\.vercel\.app$/.test(origin);
 }
 
 // Log WhatsApp status at startup (summary only)
@@ -47,8 +49,19 @@ if (!whatsappStatus.configured) {
   console.warn("📱 WhatsApp not configured — notifications will be skipped.");
 }
 
+// Hardcoded production origins — always allowed regardless of env vars.
+const PRODUCTION_ORIGINS = [
+  "https://soft-whispers-haven-7cuq.vercel.app",
+  "https://soft-whispers-haven-7cuq-pj6zwxnbd-shahkalp9820-5448s-projects.vercel.app",
+  "https://soft-whispers-haven.onrender.com",
+];
+
 // Middleware
-const explicitAllowedOrigins = parseAllowedOrigins(process.env.FRONTEND_URL);
+const explicitAllowedOrigins = [
+  ...PRODUCTION_ORIGINS,
+  ...parseAllowedOrigins(process.env.FRONTEND_URL),
+];
+
 app.use(
   cors({
     origin(origin, callback) {
@@ -57,10 +70,14 @@ app.use(
 
       if (explicitAllowedOrigins.includes(origin)) return callback(null, true);
 
+      // Allow any Vercel preview URL for this project automatically
+      if (isVercelPreviewOrigin(origin)) return callback(null, true);
+
       if (NODE_ENV !== "production" && isDevAllowedOrigin(origin)) {
         return callback(null, true);
       }
 
+      console.warn(`[CORS] Blocked origin: ${origin}`);
       return callback(null, false);
     },
     credentials: true,
@@ -68,6 +85,7 @@ app.use(
 );
 app.disable("x-powered-by");
 app.use(express.json());
+
 
 // Startup backfill: existing users were created before notification fields existed,
 // so their columns are genuinely NULL in the DB. Prisma's type-safe updateMany
