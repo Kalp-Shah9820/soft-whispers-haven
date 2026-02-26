@@ -132,7 +132,7 @@ export default function Thoughts() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.03 }}
-              className={`bg-card rounded-2xl p-5 space-y-3 ${loadingId === thought.id ? "opacity-50" : ""}`}
+              className={`bg-card rounded-2xl p-5 space-y-3 overflow-hidden ${loadingId === thought.id ? "opacity-50" : ""}`}
             >
               {editingId === thought.id ? (
                 <div className="space-y-3">
@@ -152,8 +152,8 @@ export default function Thoughts() {
                 </div>
               ) : (
                 <>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-start justify-between gap-3 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
                       <span className="text-lg">{thought.mood}</span>
                       <span className="text-xs px-2 py-1 rounded-full bg-secondary/60 text-muted-foreground">
                         {thought.shared ? "💕 Shared" : "🔒 Private"}
@@ -180,7 +180,7 @@ export default function Thoughts() {
                       </button>
                     </div>
                   </div>
-                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{thought.content}</p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed break-words overflow-wrap-anywhere">{thought.content}</p>
                   <p className="text-xs text-muted-foreground">
                     {new Date(thought.createdAt).toLocaleDateString()}
                     {thought.updatedAt !== thought.createdAt && " · edited"}
