@@ -91,6 +91,16 @@
 
   body {
     @apply bg-background text-foreground font-body leading-relaxed;
+    overflow-x: hidden;
+  }
+
+  html {
+    overflow-x: hidden;
+  }
+
+  /* Prevent any element from overflowing horizontally by default */
+  * {
+    min-width: 0;
   }
 
   h1, h2, h3, h4, h5, h6 {

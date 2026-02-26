@@ -194,7 +194,9 @@ export default function SelfCare() {
               </div>
 
               {categoryItems.length === 0 ? (
-                <p className="text-xs text-muted-foreground italic pl-1">Loading… 🌿</p>
+                (!initialized || creating)
+                  ? <p className="text-xs text-muted-foreground italic pl-1">Loading… 🌿</p>
+                  : <p className="text-xs text-muted-foreground italic pl-1">Nothing here yet — refresh the page to try again 🌱</p>
               ) : cat === "skincare" ? (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground font-medium">☀️ Morning</p>
