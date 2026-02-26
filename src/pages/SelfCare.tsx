@@ -79,20 +79,24 @@ export default function SelfCare() {
       .finally(() => setInitialized(true));
   }, []);
 
-  // ── Step 2: If backend returned nothing, create defaults ───────────────
-  // Wait for BOTH the load AND real settings before deciding what to create
+  // ── Step 2: Create items for any enabled category that has no items yet ──
   useEffect(() => {
-    if (!initialized) return;          // still loading from backend
-    if (items.length > 0) return;      // already have items — nothing to create
-    if (creating) return;              // creation already in-flight
-    // settings not yet loaded from API → wait
-    if (!settings.identity) return;    // identity only present after real settings arrive
+    if (!initialized) return;
+    if (creating) return;
+    if (!settings.identity) return;
+
+    // Which enabled categories are completely missing from loaded items?
+    const missingCategories = Object.entries(CATEGORIES).filter(([cat, config]) => {
+      if (!settings[config.settingsKey]) return false;
+      return !items.some((i) => i.category === cat);
+    });
+
+    if (missingCategories.length === 0) return;
 
     setCreating(true);
 
     const initial: SelfCareItem[] = [];
-    for (const [cat, config] of Object.entries(CATEGORIES)) {
-      if (!settings[config.settingsKey]) continue;
+    for (const [cat, config] of missingCategories) {
       for (const label of config.items) {
         initial.push({
           id: `tmp-${Math.random().toString(36).slice(2)}`,
@@ -104,13 +108,9 @@ export default function SelfCare() {
       }
     }
 
-    if (initial.length === 0) {
-      setCreating(false);
-      return;
-    }
+    if (initial.length === 0) { setCreating(false); return; }
 
-    // Optimistic: show items immediately with temp IDs
-    setItems(initial);
+    setItems((prev) => [...prev, ...initial]);
 
     selfCareAPI
       .create(initial.map((i) => ({
@@ -121,18 +121,19 @@ export default function SelfCare() {
       })))
       .then(({ items: saved }) => {
         if (saved?.length > 0) {
-          // Replace temp IDs with real backend IDs, matched by label
-          setItems(
-            initial.map((local) => {
+          setItems((prev) =>
+            prev.map((local) => {
+              if (!local.id.startsWith("tmp-")) return local;
               const match = saved.find((s: any) => s.label === local.label);
               return { ...local, id: match ? match.id : local.id };
             })
           );
         }
       })
-      .catch(() => { /* optimistic items stay */ })
+      .catch(() => { })
       .finally(() => setCreating(false));
-  }, [initialized, items.length, creating, settings]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialized, creating, settings, items.length]);
 
   // ── Toggle: PATCH only, never replaces other items ────────────────────
   const toggle = async (id: string) => {
