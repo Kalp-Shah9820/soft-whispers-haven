@@ -139,8 +139,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </AnimatePresence>
 
       {/* Main content */}
-      <main className="flex-1 md:ml-56 pt-16 md:pt-0">
-        <div className="max-w-3xl mx-auto px-4 py-8">
+      <main className="flex-1 min-w-0 md:ml-56 pt-16 md:pt-0 overflow-x-hidden">
+        <div className="max-w-3xl mx-auto px-4 py-8 min-w-0">
           {children}
         </div>
       </main>

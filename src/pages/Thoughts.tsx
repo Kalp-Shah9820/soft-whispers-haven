@@ -180,7 +180,7 @@ export default function Thoughts() {
                       </button>
                     </div>
                   </div>
-                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed break-words overflow-wrap-anywhere">{thought.content}</p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed" style={{ overflowWrap: "anywhere" }}>{thought.content}</p>
                   <p className="text-xs text-muted-foreground">
                     {new Date(thought.createdAt).toLocaleDateString()}
                     {thought.updatedAt !== thought.createdAt && " · edited"}
