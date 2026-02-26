@@ -86,7 +86,7 @@ async function runDailyMotivationJob() {
 
   for (const user of users) {
     if (!user.phone) continue;
-    const scheduledTime: string = (user as any).dailyMotivationTime ?? "09:00";
+    const scheduledTime: string = (user as any).dailyMotivationTime ?? "08:00";
     if (now !== scheduledTime) continue;
     if (await limitReached(user.id, "daily_motivation")) continue;
 
@@ -109,7 +109,7 @@ async function runDailyMotivationJob() {
 async function runWaterReminderJob() {
   const hour = currentHour();
   if (currentMinute() !== 0) return;        // top of hour only
-  if (hour < 9 || hour > 21) return;
+  if (hour < 8 || hour > 21) return;
 
   const users = await prisma.user.findMany({
     where: { role: "MAIN_USER", phone: { not: null }, notificationsEnabled: true, showWater: true },
