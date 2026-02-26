@@ -132,7 +132,7 @@ export default function Thoughts() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.03 }}
-              className={`bg-card rounded-2xl p-5 space-y-3 overflow-hidden ${loadingId === thought.id ? "opacity-50" : ""}`}
+              className={`bg-card rounded-2xl p-5 space-y-3 overflow-hidden w-full max-w-full ${loadingId === thought.id ? "opacity-50" : ""}`}
             >
               {editingId === thought.id ? (
                 <div className="space-y-3">
@@ -180,7 +180,7 @@ export default function Thoughts() {
                       </button>
                     </div>
                   </div>
-                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap" style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>{thought.content}</p>
+                  <p className="text-sm text-foreground leading-relaxed" style={{ wordBreak: "break-all", whiteSpace: "pre-wrap" }}>{thought.content}</p>
                   <p className="text-xs text-muted-foreground">
                     {new Date(thought.createdAt).toLocaleDateString()}
                     {thought.updatedAt !== thought.createdAt && " · edited"}
