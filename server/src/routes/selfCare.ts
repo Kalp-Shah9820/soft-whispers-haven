@@ -29,7 +29,11 @@ router.post("/", async (req: AuthRequest, res) => {
     if (!Array.isArray(items)) return res.status(400).json({ error: "Items array is required" });
 
     const dates = [...new Set(items.map((i: any) => i.date))];
-    await prisma.selfCareItem.deleteMany({ where: { userId: req.userId!, date: { in: dates } } });
+    // Only delete items for the SPECIFIC CATEGORIES being sent — preserves other categories
+    const categories = [...new Set(items.map((i: any) => i.category))];
+    await prisma.selfCareItem.deleteMany({
+      where: { userId: req.userId!, date: { in: dates }, category: { in: categories } },
+    });
 
     // createMany doesn't return rows — use a findMany after to return real IDs
     await prisma.selfCareItem.createMany({
