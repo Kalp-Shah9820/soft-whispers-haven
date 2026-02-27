@@ -176,6 +176,15 @@ export default function SelfCare() {
       ) : (
         visibleCategories.map(([cat, config]) => {
           const categoryItems = items.filter((i) => i.category === cat);
+          const displayItems: SelfCareItem[] = categoryItems.length > 0
+            ? categoryItems
+            : config.items.map((label, idx) => ({
+              id: `default-${cat}-${idx}`,
+              label,
+              category: cat as SelfCareItem["category"],
+              checked: false,
+              date: TODAY,
+            }));
           return (
             <motion.div
               key={cat}
@@ -194,25 +203,23 @@ export default function SelfCare() {
                 )}
               </div>
 
-              {categoryItems.length === 0 ? (
-                <p className="text-xs text-muted-foreground italic pl-1">Nothing here yet — refresh the page to try again 🌱</p>
-              ) : cat === "skincare" ? (
+              {cat === "skincare" ? (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground font-medium">☀️ Morning</p>
-                  {categoryItems.filter((i) => SKINCARE_MORNING.includes(i.label)).map((item) => (
+                  {displayItems.filter((i) => SKINCARE_MORNING.includes(i.label)).map((item) => (
                     <ItemRow key={item.id} item={item} toggle={toggle} />
                   ))}
                   <p className="text-xs text-muted-foreground font-medium pt-2">🌙 Evening</p>
-                  {categoryItems.filter((i) => SKINCARE_EVENING.includes(i.label)).map((item) => (
+                  {displayItems.filter((i) => SKINCARE_EVENING.includes(i.label)).map((item) => (
                     <ItemRow key={item.id} item={item} toggle={toggle} />
                   ))}
                   <p className="text-xs text-muted-foreground font-medium pt-2">🛁 Bath</p>
-                  {categoryItems.filter((i) => SKINCARE_BATH.includes(i.label)).map((item) => (
+                  {displayItems.filter((i) => SKINCARE_BATH.includes(i.label)).map((item) => (
                     <ItemRow key={item.id} item={item} toggle={toggle} />
                   ))}
                 </div>
               ) : (
-                categoryItems.map((item) => <ItemRow key={item.id} item={item} toggle={toggle} />)
+                displayItems.map((item) => <ItemRow key={item.id} item={item} toggle={toggle} />)
               )}
             </motion.div>
           );
