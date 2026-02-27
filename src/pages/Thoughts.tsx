@@ -116,8 +116,8 @@ export default function Thoughts() {
               key={f}
               onClick={() => setFilter(f)}
               className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${filter === f
-                  ? "bg-primary/20 text-primary ring-1 ring-primary/30"
-                  : "bg-secondary/40 text-muted-foreground hover:bg-secondary/60"
+                ? "bg-primary/20 text-primary ring-1 ring-primary/30"
+                : "bg-secondary/40 text-muted-foreground hover:bg-secondary/60"
                 }`}
             >
               {f === "all" ? "✨ All" : f === "shared" ? "💕 Shared" : "🔒 Private"}
@@ -164,7 +164,7 @@ export default function Thoughts() {
                 className={`
                   group relative bg-card rounded-3xl border border-border/30
                   shadow-sm hover:shadow-md transition-shadow duration-300
-                  overflow-hidden w-full
+                  overflow-hidden w-full min-w-0
                   ${loadingId === thought.id ? "opacity-40 pointer-events-none" : ""}
                 `}
               >
@@ -174,7 +174,7 @@ export default function Thoughts() {
                     }`}
                 />
 
-                <div className="pl-5 pr-5 pt-4 pb-5 space-y-3">
+                <div className="pl-5 pr-5 pt-4 pb-5 space-y-3 min-w-0 overflow-hidden">
 
                   {/* ── Card header ── */}
                   {editingId === thought.id ? (
@@ -209,8 +209,8 @@ export default function Thoughts() {
                           <span className="text-2xl leading-none">{thought.mood}</span>
                           <span
                             className={`text-[11px] px-2.5 py-1 rounded-full font-medium ${thought.shared
-                                ? "bg-primary/15 text-primary"
-                                : "bg-secondary/60 text-muted-foreground"
+                              ? "bg-primary/15 text-primary"
+                              : "bg-secondary/60 text-muted-foreground"
                               }`}
                           >
                             {thought.shared ? "💕 Shared" : "🔒 Private"}
