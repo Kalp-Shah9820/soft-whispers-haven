@@ -214,7 +214,7 @@ export function useMoodHistoryAPI(): [MoodEntry[], (updater: MoodEntry[] | ((pre
 }
 
 // Settings hooks
-export function useSettingsAPI(): [Settings, (updater: Settings | ((prev: Settings) => Settings)) => void] {
+export function useSettingsAPI(): [Settings, (updater: Settings | ((prev: Settings) => Settings)) => void, boolean] {
   const [settings, setSettings] = useState<Settings>({
     globalSharing: false,
     showWater: true,
@@ -281,7 +281,7 @@ export function useSettingsAPI(): [Settings, (updater: Settings | ((prev: Settin
     [settings]
   );
 
-  return [settings, updateSettings];
+  return [settings, updateSettings, loading];
 }
 
 // Self-care hooks

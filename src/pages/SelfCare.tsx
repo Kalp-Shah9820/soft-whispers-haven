@@ -60,7 +60,7 @@ function backendToItem(i: any): SelfCareItem {
 
 export default function SelfCare() {
   const [items, setItems] = useState<SelfCareItem[]>([]);
-  const [settings] = useSettingsAPI();
+  const [settings, , settingsLoading] = useSettingsAPI();
   // initialized: true once we've heard back from the backend load (success or failure)
   const [initialized, setInitialized] = useState(false);
   // creating: true while the initialization POST is in-flight (prevents double-fire)
@@ -82,6 +82,7 @@ export default function SelfCare() {
   // ── Step 2: Create items for any enabled category that has no items yet ──
   useEffect(() => {
     if (!initialized) return;
+    if (settingsLoading) return;
     if (creating) return;
     if (!settings.identity) return;
 
@@ -133,7 +134,7 @@ export default function SelfCare() {
       .catch(() => { })
       .finally(() => setCreating(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialized, creating, settings, items.length]);
+  }, [initialized, settingsLoading, creating, settings, items.length]);
 
   // ── Toggle: PATCH only, never replaces other items ────────────────────
   const toggle = async (id: string) => {
@@ -194,7 +195,7 @@ export default function SelfCare() {
               </div>
 
               {categoryItems.length === 0 ? (
-                (!initialized || creating)
+                (!initialized || settingsLoading || creating)
                   ? <p className="text-xs text-muted-foreground italic pl-1">Loading… 🌿</p>
                   : <p className="text-xs text-muted-foreground italic pl-1">Nothing here yet — refresh the page to try again 🌱</p>
               ) : cat === "skincare" ? (
